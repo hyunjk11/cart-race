@@ -21,7 +21,8 @@ document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0xbfd4e6); scene.fog = new THREE.Fog(0xbfd4e6, 40, 110);
 const camera = new THREE.PerspectiveCamera(innerWidth < innerHeight ? 80 : 65, innerWidth / innerHeight, 0.1, 300);
 const LOWFX = QUALITY === 'low'; FX.initFx({ low: LOWFX, camera }); if (LOWFX) document.body.classList.add('lowfx');
-addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+function fitView() { const w = innerWidth, h = innerHeight; camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h); document.documentElement.style.setProperty('--vh', h + 'px'); }
+addEventListener('resize', fitView); addEventListener('orientationchange', () => setTimeout(fitView, 250)); if (window.visualViewport) visualViewport.addEventListener('resize', fitView); fitView();
 const hemi = new THREE.HemisphereLight(0xfffaf0, 0x8a8070, 1.25); scene.add(hemi);
 const dl2 = new THREE.DirectionalLight(0xdfefff, 0.5); dl2.position.set(-30, 30, -20); scene.add(dl2);
 const dl = new THREE.DirectionalLight(0xffffff, 1.2); dl.position.set(20, 40, 10); scene.add(dl);
@@ -64,7 +65,9 @@ document.querySelectorAll('#touch [data-key]').forEach(b => {
   b.addEventListener('pointerdown', e => { b.setPointerCapture?.(e.pointerId); on(e); });
   ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => b.addEventListener(ev, off));
 });
-['touchmove', 'gesturestart', 'dblclick'].forEach(ev => document.addEventListener(ev, e => { if (!e.target.closest?.('button')) e.preventDefault(); }, { passive: false }));
+// block page zoom/scroll gestures only on the game itself; menus/overlays keep native touch scrolling
+const SCROLLABLE = '#title,#mp,#charSel,#finish,.scrolly';
+['touchmove', 'gesturestart', 'dblclick'].forEach(ev => document.addEventListener(ev, e => { const t = e.target; if (t.closest?.('button') && ev !== 'touchmove') return; if (t.closest?.(SCROLLABLE)) return; e.preventDefault(); }, { passive: false }));
 
 // ---------- stats ----------
 const stats = { knocked: 0, spilled: 0 };

@@ -220,3 +220,49 @@ body.podium #spec{display:none!important}
 #pa.show{opacity:1;visibility:visible;transition:bottom .45s cubic-bezier(.3,1.5,.5,1),opacity .2s}
 @media (max-width:700px),(pointer:coarse){#pa{top:-60px;bottom:auto;font-size:12px;padding:4px 10px;border-width:2px;white-space:normal;text-align:center;max-width:72vw;transition:top .35s,opacity .3s,visibility 0s .3s}
  #pa.show{top:calc(env(safe-area-inset-top,0px) + 8px);bottom:auto}#pa .ding{padding:0 5px;font-size:11px}}
+/* ===== Patch 6: mobile fit & native menu scrolling ===== */
+html,body{touch-action:manipulation}
+canvas,#touch,#touch *{touch-action:none}
+#title,#mp,#charSel,#finish{touch-action:pan-y;overscroll-behavior:contain}
+.tpanel,.mppanel,.cspanel,#finish .panel{touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;overflow-y:auto;max-height:calc(var(--vh,100dvh) - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));box-sizing:border-box}
+.maprow,.charrow{touch-action:pan-x pan-y}
+#title,#mp,#charSel{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);box-sizing:border-box}
+/* sticky action bars: always visible at the bottom of the scrolling panel */
+.tfoot,.cspanel .lbtns,.mppanel .lbtns,#finish .panel #restart{position:sticky;bottom:0;z-index:3}
+.tfoot{margin:10px -50px -30px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:linear-gradient(transparent,#223 30%)}
+.cspanel .lbtns{margin:6px -16px -12px;padding:8px 10px;background:linear-gradient(rgba(255,241,224,0),#fff1e0 35%)}
+.mppanel .lbtns{margin:8px -26px -20px;padding:8px 12px;background:linear-gradient(transparent,#223 30%)}
+#finish .panel #restart{display:block;margin:8px auto 0}
+@media (max-width:700px),(max-height:520px){
+ .panel.tpanel{padding:12px 14px 0;width:min(560px,96vw);line-height:1.35}
+ .tfoot{margin:8px -14px 0;gap:8px}
+ .tpanel .logo{font-size:30px;line-height:1}.tpanel h1{font-size:24px}.tpanel .sub{font-size:12px;margin:4px 0}
+ .tpanel .ctl{display:none!important}
+ .mapsel{margin:6px 0}.mlabel{font-size:14px}
+ .tpanel .maprow,#lobbyMaps,#lobbyModes{display:flex;flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;gap:6px;padding-bottom:4px;scroll-snap-type:x mandatory}
+ .tpanel .maprow>button,#lobbyMaps>button,#lobbyModes>button{flex:0 0 auto;scroll-snap-align:start}
+ .tpanel .note{font-size:11px;margin:2px 0}
+ .charbtn{font-size:15px;padding:6px 12px;margin:4px auto}
+ #startBtn{font-size:20px;padding:10px 22px}#mpBtn{font-size:18px;padding:10px 18px}
+ .qrow{font-size:13px}
+ .mppanel{padding:12px 14px 0}.mppanel .lbtns{margin:6px -14px 0;display:flex;flex-wrap:wrap;gap:6px;justify-content:center}.mppanel .lbtns button{margin:0;padding:8px 12px;font-size:15px}
+ #chatLog{max-height:70px}
+ .cspanel{padding:8px 10px 0!important;width:98vw}
+ .cspanel h2{font-size:18px;margin:0 0 4px}
+ .csmain{flex-direction:row;gap:8px;align-items:center}
+ #charPrev{width:130px;height:150px;flex:0 0 auto}
+ #charInfo{font-size:12px;min-width:0}#charInfo .cni{font-size:20px}#charInfo .cti{font-size:12px}#charInfo p{margin:3px 0 4px;font-size:11px;line-height:1.3}
+ .csb{font-size:11px}.csb span{width:44px}.csb i{font-size:12px;letter-spacing:1px}
+ .charrow{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:6px 0}
+ .chc{padding:4px 2px;border-width:2px}.chc .ci{font-size:20px}.chc b{font-size:12px}.chc small{display:none}
+ .cspanel .lbtns{margin:4px -10px 0;display:flex;gap:6px;justify-content:center}.cspanel .lbtns button{margin:0;padding:8px 12px;font-size:14px}
+ #charSel.lineup #charPrev{width:100%;height:170px}#lineupNames{font-size:9px}
+ #finish .panel{padding:10px 12px}
+}
+@media (max-height:520px) and (orientation:landscape){
+ .tpanel{width:min(760px,96vw)}
+ .tpanel .logo{display:none}.tpanel .sub{display:none}
+ #charPrev{width:120px;height:120px}.charrow{grid-template-columns:repeat(8,1fr)}
+ #finish.pod .panel{max-height:calc(var(--vh,100dvh) - 20px)}
+ #finish.pod.shop .panel{max-height:calc(var(--vh,100dvh) - 20px);width:min(360px,60vw)}
+}
