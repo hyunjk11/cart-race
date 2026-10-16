@@ -67,6 +67,8 @@ function hostRecv(conn, m) {
   else if (m.t === 'st') api.onRemoteState(i, m.s);
   else if (m.t === 'item') api.onRemoteItem(i);
   else if (m.t === 'spawn') api.onSpawn(m.a);
+  else if (m.t === 'crash') api.onRemoteCrash(i);
+  else if (m.t === 'hz') api.onRemoteHazard(i, m.id, !!m.sh);
 }
 function hostDrop(peerId) {
   const conn = NET.conns.get(peerId); NET.conns.delete(peerId); const i = slotOf(peerId); if (i < 0) return;

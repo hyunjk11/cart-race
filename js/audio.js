@@ -4,8 +4,9 @@ const listeners = [];
 export function isMuted() { return muted; }
 export function onMuteChange(f) { listeners.push(f); }
 export function setMuted(m) { muted = m; localStorage.setItem('cartMuted', m ? '1' : '0'); if (master) master.gain.setTargetAtTime(m ? 0 : 1, ctx.currentTime, 0.05); listeners.forEach(f => f(m)); }
+export function suspendAudio() { if (ctx && ctx.state === 'running') ctx.suspend(); }
 export function initAudio() {
-  if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
+  if (ctx) { if (ctx.state !== 'running' && !document.hidden) ctx.resume().catch(() => {}); return; }
   const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
   ctx = new AC();
   master = ctx.createGain(); master.gain.value = muted ? 0 : 1; master.connect(ctx.destination);

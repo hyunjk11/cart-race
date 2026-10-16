@@ -5,6 +5,7 @@
 <link rel="stylesheet" href="style.css">
 <script type="importmap">{"imports":{
  "three":"https://unpkg.com/three@0.160.0/build/three.module.js",
+ "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/",
  "cannon-es":"https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"}}</script>
 </head><body>
 <div id="hud">
@@ -26,6 +27,7 @@
 <div id="title"><div class="panel tpanel">
  <div class="logo">🛒💨</div><h1>마트 카트 레이싱</h1><p class="sub">드리프트로 N2O를 모으고, 아이템으로 라이벌을 막고, 마트를 혼돈에 빠뜨려라!</p>
  <div class="tbtns"><button id="startBtn">🏁 혼자 하기</button><button id="mpBtn">🌐 멀티플레이</button></div>
+ <div class="qrow">화질 <select id="quality"><option value="auto">자동</option><option value="low">낮음 (저사양/모바일)</option><option value="high">높음</option></select></div>
  <div class="ctl desk">⌨️ ↑/W 가속 · ↓/S 브레이크 · ←→ 조향 · <b>Shift+방향 드리프트</b> · 스페이스 N2O · E 아이템 · T 자동가속 · M 소리</div>
  <div class="ctl mob">📱 자동 가속 · 왼쪽 D-패드: ◀▶ 조향, ▼ 브레이크(▼+방향 = 드리프트), ▲ 힘껏 밀기 · 오른쪽: 드리프트 / 부스트 / 아이템</div>
 </div></div>

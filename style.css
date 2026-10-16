@@ -103,3 +103,4 @@ body.touch #auto{display:none}
 #slots .dot{width:14px;height:14px;border-radius:50%}#slots .rd{margin-left:auto;font-size:13px;opacity:.8}#slots .rd.on{color:#9f9;opacity:1}
 #slots .slot button{margin:0;padding:4px 10px;font-size:13px;background:#a33}#slots .empty{opacity:.5}
 #chatLog{height:90px;overflow:auto;background:#0004;border-radius:8px;padding:6px;font-size:13px;margin-top:10px}#chatIn{margin-top:6px}
+.qrow{margin-top:12px;font-size:15px}.qrow select{font-size:15px;padding:4px 8px;border-radius:6px}

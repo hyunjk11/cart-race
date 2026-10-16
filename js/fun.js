@@ -11,6 +11,7 @@ export const ITEMS = {
 const ITEM_KEYS = Object.keys(ITEMS);
 const lm = c => new THREE.MeshLambertMaterial({ color: c });
 
+function disposeObj(o) { o.traverse(n => { if (n.isSprite && n.material.map) { n.material.map.dispose(); n.material.dispose(); } }); }
 export function createFun(G) {
   const { scene, world, carts, path, N, strips, customers, sound } = G;
   const ang = a => Math.atan2(Math.sin(a), Math.cos(a));
@@ -87,7 +88,7 @@ export function createFun(G) {
     else { mesh = signMesh(); mesh.position.set(x, 0, z); }
     scene.add(mesh); const h = { id: ++hid, type, x, z, life, r, owner, mesh, arm: 0.5 }; hazards.push(h); return h;
   }
-  function removeHazard(h) { scene.remove(h.mesh); hazards.splice(hazards.indexOf(h), 1); }
+  function removeHazard(h) { scene.remove(h.mesh); if (h.type === 'puddle') h.mesh.geometry.dispose(); else if (h.type === 'sign') disposeObj(h.mesh); hazards.splice(hazards.indexOf(h), 1); }
   const bagG = new THREE.BoxGeometry(0.5, 0.55, 0.3), bagM = lm(0xff7043);
   function aheadOf(c) { let best = null, bd = 1e9; for (const o of carts) { if (o === c || o.finished) continue; const d = o.prog - c.prog; if (d > 0 && d < bd) { bd = d; best = o; } } return best; }
   function hit(c, by) {
@@ -147,10 +148,10 @@ export function createFun(G) {
       scene.add(g); ev.fork = { g, i, nx: -tz, nz: tx, s: -(HW - 1), dir: 1, drop: 0 }; ev.dur = 11; }
   }
   function endEvent() {
-    for (const o of ev.objs) { if (o.mesh) { if (hazards.includes(o)) removeHazard(o); } else scene.remove(o); } ev.objs = [];
+    for (const o of ev.objs) { if (o.mesh) { if (hazards.includes(o)) removeHazard(o); } else { scene.remove(o); disposeObj(o); } } ev.objs = [];
     for (const cu of customers) if (cu.rush) { delete cu.rush; cu.sp = cu.baseSp || cu.sp; G.retarget(cu); }
     if (ev.stand) { const s = ev.stand; strips.splice(strips.indexOf(s.st), 1); scene.remove(s.t); scene.remove(s.sg); world.removeBody(s.body); fixedObs.splice(fixedObs.indexOf(s.ob), 1); ev.stand = null; }
-    if (ev.vip) { scene.remove(ev.vip.g.root); ev.vip = null; }
+    if (ev.vip) { scene.remove(ev.vip.g.root); disposeObj(ev.vip.g.root); ev.vip = null; }
     if (ev.fork) { scene.remove(ev.fork.g); ev.fork = null; }
     setDim(0); ev.name = null; ev.next = 25 + Math.random() * 15;
   }
@@ -197,6 +198,7 @@ export function createFun(G) {
       for (let i = hazards.length - 1; i >= 0; i--) { const h = hazards[i]; const d = Math.hypot(c.x - h.x, c.z - h.z);
         if (h.type === 'puddle') { if (d < h.r) c.slipT = 0.35; continue; }
         if (h.owner === c && h.arm > 0) continue;
+        if (c.remote) continue; // remote (guest) carts resolve sign/banana hits themselves and report them
         if (d < h.r + 0.4) { if (h.type === 'banana') { hit(c, h.owner); removeHazard(h); }
           else { c.v *= 0.55; G.puff(h.x, 0.6, h.z, 0xffd600, 5); if (c === G.player) { sound.bump(0.8); G.shakeIt(0.3); } removeHazard(h); } } }
     }
@@ -221,9 +223,11 @@ export function createFun(G) {
     const t = performance.now() / 1000, P = G.player;
     for (const b of boxes) { b.m.visible = b.cd <= 0; b.m.rotation.set(t * 0.7, t * 1.3, 0); b.m.position.y = 1.1 + Math.sin(t * 2 + b.x) * 0.15; }
     P.slipT = Math.max(0, (P.slipT || 0) - dt);
-    for (const h of hazards) if (h.type === 'puddle' && Math.hypot(P.x - h.x, P.z - h.z) < h.r) P.slipT = 0.35;
+    for (const h of hazards) { h.arm -= dt; if (h.type === 'puddle' && Math.hypot(P.x - h.x, P.z - h.z) < h.r) P.slipT = 0.35; }
     for (const c of carts) c.shieldMesh.visible = (c.shieldT || 0) > 0;
     for (const p of projs) { p.m.position.set(p.x, 1.2, p.z); p.m.rotation.y += dt * 10; }
+    if (P.magnetT > 0) { P.magnetT -= dt; const T = P.magTarget; if (T) { P.x += (T.x - P.x) * Math.min(1, dt * 0.6); P.z += (T.z - P.z) * Math.min(1, dt * 0.6); } }
+    for (const p of props) { const b = p.mesh.position; if (Math.abs(b.x - P.x) < 1.4 && Math.abs(b.z - P.z) < 1.4) P.v *= 0.99; }
     if (ev.vip && ev.vipT) { const V = ev.vip, k = Math.min(1, dt * 10); V.x += (ev.vipT[0] - V.x) * k; V.z += (ev.vipT[1] - V.z) * k; V.g.root.position.set(V.x, 0, V.z); V.g.root.rotation.y = ev.vipT[2]; V.g.update(7, dt); }
     if (ev.fork && ev.forkT) { ev.fork.g.position.set(ev.forkT[0], 0, ev.forkT[1]); ev.fork.g.rotation.y = ev.forkT[2]; }
     if (ev.name === 'blackout') { ev.t += dt; setDim(ev.t < 0.6 ? (Math.random() < 0.5 ? 1 : 0.3) : 1); }
@@ -239,7 +243,7 @@ export function createFun(G) {
     if (!guestInit) { guestInit = true; for (const p of props) world.removeBody(p.body); }
     const ids = new Set(S.hz.map(h => h[0]));
     for (let i = hazards.length - 1; i >= 0; i--) if (!ids.has(hazards[i].id)) removeHazard(hazards[i]);
-    for (const [id, type, x, z, r] of S.hz) if (!hazards.find(h => h.id === id)) { const h = addHazard(type, x, z, 999, r, null); h.id = id; }
+    for (const [id, type, x, z, r] of S.hz) if (!hazards.find(h => h.id === id)) { const h = addHazard(type, x, z, 999, r, null); h.id = id; const P = G.player, behind = (x - P.x) * Math.sin(P.h) + (z - P.z) * Math.cos(P.h) < 0; h.arm = behind && Math.hypot(P.x - x, P.z - z) < 4 ? 0.6 : 0; } // own drops land behind
     const pids = new Set(S.pj.map(p => p[0]));
     for (let i = projs.length - 1; i >= 0; i--) if (!pids.has(projs[i].id)) { G.puff(projs[i].x, 1.2, projs[i].z, 0xff7043, 5); scene.remove(projs[i].m); projs.splice(i, 1); }
     for (const [id, x, z] of S.pj) { let p = projs.find(q => q.id === id); if (!p) { p = { id, m: new THREE.Mesh(bagG, bagM), x, z }; scene.add(p.m); projs.push(p); } p.x = x; p.z = z; }
@@ -254,5 +258,6 @@ export function createFun(G) {
     if (S.ev) { ev.vipT = S.ev.v; ev.forkT = S.ev.f; }
   }
   function reset() { if (ev.name) endEvent(); for (const h of [...hazards]) removeHazard(h); for (const p of projs) scene.remove(p.m); projs.length = 0; for (const b of boxes) b.cd = 0; ev.next = 18 + Math.random() * 8; for (const c of carts) { c.shieldT = 0; c.magnetT = 0; c.item = null; } }
-  return { update, snap, applySnap, reset, EVN, skid, useItem, obstacles, hazards, projs, boxes, props, ev, startEvent, ITEMS };
+  function remoteHazardHit(c, id, shielded) { const h = hazards.find(h => h.id === id); if (!h) return; if (shielded) c.shieldT = 0; removeHazard(h); }
+  return { remoteHazardHit, addHazard, update, snap, applySnap, reset, EVN, skid, useItem, obstacles, hazards, projs, boxes, props, ev, startEvent, ITEMS };
 }

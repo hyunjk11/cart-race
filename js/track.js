@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // Rounded-rectangle loop through supermarket aisles.
 export const HX = 50, HZ = 30, HW = 6, SD = 1.6, SH = 3.2;
 export const LAPS = 3;
@@ -39,6 +40,7 @@ export function shelfStrips() {
 const PCOLS = [0xe53935, 0x43a047, 0x1e88e5, 0xfdd835, 0xfb8c00, 0x8e24aa, 0xffffff, 0x00acc1, 0x6d4c41];
 
 export function buildWorld(scene, world, strips) {
+  const before = new Set(scene.children);
   // floor
   const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
   g.fillStyle = '#e8e4da'; g.fillRect(0, 0, 128, 128); g.fillStyle = '#d4cfc2'; g.fillRect(0, 0, 64, 64); g.fillRect(64, 64, 64, 64);
@@ -103,6 +105,12 @@ export function buildWorld(scene, world, strips) {
   const promos = ['오늘의 특가', '1+1 행사', '신선 과일', '라면 대전', '반값 할인'];
   promos.forEach((t, i) => { const s = textSprite(t, i % 2 ? '#ef6c00' : '#2e7d32'); const a = (i / promos.length) * Math.PI * 2;
     s.position.set(-40 + i * 20, 5.6, i % 2 ? HZ + HW + 0.9 : -HZ - HW - 0.9); s.scale.set(4, 1, 1); scene.add(s); });
+  // merge all static meshes that share a material into one draw call each (big win on mobile)
+  const groups = new Map();
+  for (const o of [...scene.children]) { if (before.has(o) || !o.isMesh || o.isInstancedMesh) continue; o.updateMatrixWorld(); const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone(); g.applyMatrix4(o.matrixWorld);
+    for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
+    if (!groups.has(o.material)) groups.set(o.material, []); groups.get(o.material).push(g); scene.remove(o); o.geometry.dispose(); }
+  for (const [mat, gs] of groups) { const merged = mergeGeometries(gs, false); gs.forEach(g => g.dispose()); if (merged) scene.add(new THREE.Mesh(merged, mat)); }
   return { meshes, items, hidden: new Uint8Array(items.length) };
 
   // inner decorative aisles (unreachable, for looks)
