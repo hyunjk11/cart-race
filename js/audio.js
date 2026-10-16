@@ -24,8 +24,15 @@ export function initAudio() {
   o1.connect(lp); o2.connect(lp); lp.connect(g); g.connect(sfx); n.connect(bp); bp.connect(ng); ng.connect(sfx);
   o1.start(); o2.start(); n.start();
   eng = { o1, o2, lp, g, ng, bp };
+  // drift squeal
+  const sq = ctx.createOscillator(); sq.type = 'sawtooth'; sq.frequency.value = 900;
+  const sqf = ctx.createBiquadFilter(); sqf.type = 'bandpass'; sqf.frequency.value = 1800; sqf.Q.value = 6;
+  const sn = ctx.createBufferSource(); sn.buffer = noiseBuf; sn.loop = true;
+  const sqg = ctx.createGain(); sqg.gain.value = 0; sq.connect(sqf); sn.connect(sqf); sqf.connect(sqg); sqg.connect(sfx); sq.start(); sn.start();
+  eng.sq = sq; eng.sqg = sqg;
   startMusic();
 }
+export function setDrift(a) { if (!ctx) return; const t = ctx.currentTime; eng.sqg.gain.setTargetAtTime(Math.min(1, a) * 0.07, t, 0.05); eng.sq.frequency.setTargetAtTime(800 + a * 500 + Math.random() * 80, t, 0.05); }
 export function setEngine(speed, boosting) {
   if (!ctx) return; const t = ctx.currentTime, s = Math.min(1, Math.abs(speed) / 28);
   eng.o1.frequency.setTargetAtTime(45 + s * 90 + (boosting ? 30 : 0), t, 0.1);
@@ -56,6 +63,9 @@ export const sound = {
   oof() { tone(700, 0.25, 'square', 0.15, 0, sfx, 250); tone(520, 0.2, 'triangle', 0.2, 0.05, sfx, 900); this.bump(1); },
   clatter(n = 5) { for (let i = 0; i < Math.min(n, 10); i++) { const w = i * 0.05 + Math.random() * 0.06; tone(1200 + Math.random() * 1500, 0.12, 'triangle', 0.08, w); noise(0.06, 3000, 0.15, w, 3); } },
   fanfare() { [523, 659, 784, 1047, 784, 1047].forEach((f, i) => { tone(f, i === 5 ? 0.8 : 0.18, 'square', 0.15, i * 0.16); tone(f / 2, i === 5 ? 0.8 : 0.18, 'triangle', 0.15, i * 0.16); }); },
+  empty() { tone(220, 0.12, 'square', 0.15); tone(165, 0.18, 'square', 0.15, 0.1); },
+  chime() { [784, 659, 523].forEach((f, i) => { tone(f, 0.7, 'sine', 0.25, i * 0.35); tone(f * 2, 0.5, 'sine', 0.05, i * 0.35); }); },
+  charge() { tone(988, 0.1, 'square', 0.12); tone(1319, 0.18, 'square', 0.12, 0.08); },
   lap() { tone(880, 0.12, 'square', 0.15); tone(1175, 0.2, 'square', 0.15, 0.12); },
 };
 // light looping supermarket-style tune (bouncy major key)

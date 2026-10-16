@@ -71,11 +71,21 @@ export function buildWorld(scene, world, strips) {
       items.push([px, h, pz]);
     }
   }
-  const ig = new THREE.BoxGeometry(0.4, 0.6, 0.4);
-  const im = new THREE.InstancedMesh(ig, new THREE.MeshLambertMaterial(), items.length);
+  // several product kinds on shelves, each one InstancedMesh
+  const kinds = [
+    { g: new THREE.BoxGeometry(0.38, 0.6, 0.18), cols: [0xffb300, 0xe53935, 0x1e88e5, 0x8e24aa], sy: [0.8, 1.2] },      // cereal boxes
+    { g: new THREE.CylinderGeometry(0.09, 0.11, 0.55, 8), cols: [0x43a047, 0x00acc1, 0xffffff, 0xd81b60], sy: [0.8, 1.1] }, // bottles
+    { g: new THREE.CylinderGeometry(0.16, 0.16, 0.36, 10), cols: [0xd32f2f, 0xfdd835, 0x546e7a], sy: [0.9, 1.0] },          // cans
+    { g: new THREE.CylinderGeometry(0.17, 0.17, 0.3, 10), cols: [0xffffff, 0xf5f5f5], sy: [1, 1] },                          // toilet paper
+    { g: new THREE.BoxGeometry(0.5, 0.16, 0.3), cols: [0xd7ccc8, 0xffecb3], sy: [1, 1] },                                    // egg cartons
+  ];
+  const buckets = kinds.map(() => []);
+  items.forEach((p, i) => { const k = (Math.floor(i / 7) + (p[1] < 0.5 ? 3 : 0)) % kinds.length; p.push(k, buckets[k].length); buckets[k].push(p); });
   const m = new THREE.Matrix4(), col = new THREE.Color();
-  items.forEach((p, i) => { const sy = 0.7 + Math.random() * 0.8; m.makeScale(1, sy, 1); m.setPosition(p[0], p[1] + 0.3 * sy, p[2]); im.setMatrixAt(i, m); im.setColorAt(i, col.setHex(PCOLS[i % PCOLS.length])); });
-  scene.add(im);
+  const meshes = kinds.map((K, k) => { const im = new THREE.InstancedMesh(K.g, new THREE.MeshLambertMaterial(), Math.max(1, buckets[k].length));
+    buckets[k].forEach((p, i) => { const sy = K.sy[0] + Math.random() * (K.sy[1] - K.sy[0]); K.g.computeBoundingBox(); const hh = (K.g.boundingBox.max.y) * sy;
+      m.makeScale(1, sy, 1); m.setPosition(p[0], p[1] + hh, p[2]); im.setMatrixAt(i, m); im.setColorAt(i, col.setHex(K.cols[(Math.random() * K.cols.length) | 0])); });
+    im.count = buckets[k].length; scene.add(im); return im; });
   // price tags along shelf board edges
   const tagM = new THREE.MeshBasicMaterial({ color: 0xfff176 }), redM = new THREE.MeshBasicMaterial({ color: 0xe53935 });
   for (const st of strips) {
@@ -93,7 +103,7 @@ export function buildWorld(scene, world, strips) {
   const promos = ['오늘의 특가', '1+1 행사', '신선 과일', '라면 대전', '반값 할인'];
   promos.forEach((t, i) => { const s = textSprite(t, i % 2 ? '#ef6c00' : '#2e7d32'); const a = (i / promos.length) * Math.PI * 2;
     s.position.set(-40 + i * 20, 5.6, i % 2 ? HZ + HW + 0.9 : -HZ - HW - 0.9); s.scale.set(4, 1, 1); scene.add(s); });
-  return { im, items, hidden: new Uint8Array(items.length) };
+  return { meshes, items, hidden: new Uint8Array(items.length) };
 
   // inner decorative aisles (unreachable, for looks)
   for (let z = -HZ + HW + 5; z < HZ - HW - 2; z += 6) { const s = new THREE.Mesh(new THREE.BoxGeometry(2 * (HX - HW) - 8, SH, 1.4), frameMat); s.position.set(0, SH / 2, z); scene.add(s); }
