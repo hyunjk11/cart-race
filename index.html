@@ -14,12 +14,15 @@
 </div>
 <div id="countdown"></div>
 <div id="msg"></div>
-<div id="help">조작: ↑/W 가속 · ↓/S 브레이크·후진 · ←→/A D 조향 · 스페이스 부스트 · M 소리 · R 다시 시작</div>
+<div id="help">조작: ↑/W 가속 · ↓/S 브레이크·후진 · ←→/A D 조향 · 스페이스 부스트 · M 소리 · T 자동가속 · R 다시 시작</div>
 <button id="mute" title="소리 켜기/끄기 (M)">🔊</button>
 <div id="touch">
- <div class="tl"><button data-key="ArrowLeft">◀</button><button data-key="ArrowRight">▶</button></div>
- <div class="tr"><button data-key="Space" class="boost">부스트</button><button data-key="ArrowDown" class="brake">브레이크</button><button data-key="ArrowUp" class="gas">가속</button></div>
+ <div class="dpad"><button data-key="ArrowUp" class="up">▲</button><button data-key="ArrowLeft" class="left">◀</button><button data-key="ArrowRight" class="right">▶</button><button data-key="ArrowDown" class="down">▼</button></div>
+ <div class="tr"><button data-key="Space" class="boost">부스트</button></div>
 </div>
+<button id="auto"></button>
+<canvas id="minimap" width="150" height="100"></canvas>
+<div id="bubbles"></div>
 <div id="finish" class="hidden"><div class="panel"><h1 id="finTitle">결승!</h1><div id="finBody"></div><button id="restart">다시 시작</button></div></div>
 <script type="module" src="js/main.js"></script>
 </body></html>

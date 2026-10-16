@@ -50,6 +50,8 @@ export function buildWorld(scene, world, strips) {
   // ceiling lights
   const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   for (let x = -60; x <= 60; x += 15) for (let z = -36; z <= 36; z += 36) { const l = new THREE.Mesh(new THREE.BoxGeometry(6, 0.1, 0.6), lightMat); l.position.set(x, 7, z); scene.add(l); }
+  for (let x = -55; x <= 55; x += 11) for (const z of [-HZ, HZ]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 7), lightMat); l.position.set(x, 6.5, z); scene.add(l); }
+  for (const x of [-HX, HX]) for (let z = -25; z <= 25; z += 10) { const l = new THREE.Mesh(new THREE.BoxGeometry(7, 0.08, 0.5), lightMat); l.position.set(x, 6.5, z); scene.add(l); }
 
   // shelves: frame + boards per strip, products instanced
   const frameMat = new THREE.MeshLambertMaterial({ color: 0x8a96a3 });
@@ -74,6 +76,24 @@ export function buildWorld(scene, world, strips) {
   const m = new THREE.Matrix4(), col = new THREE.Color();
   items.forEach((p, i) => { const sy = 0.7 + Math.random() * 0.8; m.makeScale(1, sy, 1); m.setPosition(p[0], p[1] + 0.3 * sy, p[2]); im.setMatrixAt(i, m); im.setColorAt(i, col.setHex(PCOLS[i % PCOLS.length])); });
   scene.add(im);
+  // price tags along shelf board edges
+  const tagM = new THREE.MeshBasicMaterial({ color: 0xfff176 }), redM = new THREE.MeshBasicMaterial({ color: 0xe53935 });
+  for (const st of strips) {
+    const w = st.x1 - st.x0, d = st.z1 - st.z0, along = w > d, cx = (st.x0 + st.x1) / 2, cz = (st.z0 + st.z1) / 2;
+    for (const h of [0.12, 1.07, 2.02]) {
+      const t = new THREE.Mesh(new THREE.BoxGeometry(along ? w : 0.02, 0.14, along ? 0.02 : d), tagM);
+      t.position.set(along ? cx : (st.nx > 0 ? st.x1 : st.x0) + st.nx * 0.01, h, along ? (st.nz > 0 ? st.z1 : st.z0) + st.nz * 0.01 : cz); scene.add(t);
+    }
+    // a few red sale tags
+    const len = Math.max(w, d);
+    for (let a = 3; a < len; a += 9) { const t = new THREE.Mesh(new THREE.BoxGeometry(along ? 0.5 : 0.03, 0.3, along ? 0.03 : 0.5), redM);
+      t.position.set(along ? st.x0 + a : (st.nx > 0 ? st.x1 : st.x0) + st.nx * 0.02, 1.0, along ? (st.nz > 0 ? st.z1 : st.z0) + st.nz * 0.02 : st.z0 + a); scene.add(t); }
+  }
+  // hanging promo signs
+  const promos = ['오늘의 특가', '1+1 행사', '신선 과일', '라면 대전', '반값 할인'];
+  promos.forEach((t, i) => { const s = textSprite(t, i % 2 ? '#ef6c00' : '#2e7d32'); const a = (i / promos.length) * Math.PI * 2;
+    s.position.set(-40 + i * 20, 5.6, i % 2 ? HZ + HW + 0.9 : -HZ - HW - 0.9); s.scale.set(4, 1, 1); scene.add(s); });
+  return { im, items, hidden: new Uint8Array(items.length) };
 
   // inner decorative aisles (unreachable, for looks)
   for (let z = -HZ + HW + 5; z < HZ - HW - 2; z += 6) { const s = new THREE.Mesh(new THREE.BoxGeometry(2 * (HX - HW) - 8, SH, 1.4), frameMat); s.position.set(0, SH / 2, z); scene.add(s); }
