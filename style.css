@@ -88,3 +88,18 @@ body.touch #auto{display:none}
 .ctl{font-size:14px;opacity:.85;margin-top:14px}.ctl.mob{display:none}body.touch .ctl.mob{display:block}body.touch .ctl.desk{display:none}
 #riders{font-size:14px;color:#ffc1e3;text-shadow:0 1px 2px #000;margin-top:4px}
 @media (max-width:700px){.tpanel h1{font-size:30px}#startBtn{font-size:24px;padding:12px 34px}.logo{font-size:44px}}
+/* v5 multiplayer */
+.tbtns{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+#mpBtn{font-size:26px;padding:14px 34px;border-radius:40px;background:linear-gradient(#4fc3f7,#0277bd);box-shadow:0 6px 0 #01579b}
+#mp{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#000a;z-index:21}
+.mppanel{width:min(560px,92vw);max-height:92vh;overflow:auto;text-align:left;padding:20px 26px}.mppanel h2{margin:4px 0 12px;text-align:center}
+.mppanel input{font-size:17px;padding:8px 10px;border-radius:8px;border:0;width:100%;box-sizing:border-box;user-select:text;-webkit-user-select:text}
+.mppanel label{display:block;margin-bottom:8px}.mppanel button{margin:6px 4px 0 0;font-size:17px;padding:8px 16px}
+.joinrow{display:flex;gap:8px;align-items:center}.joinrow input{flex:1}.joinrow button{margin:0;white-space:nowrap}
+#mpMsg,#lobbyMsg{min-height:22px;margin-top:8px;color:#9f9}#mpMsg.err,#lobbyMsg.err{color:#ff8a80}
+.note{font-size:13px;opacity:.75;margin-top:6px}button.sec{background:#555}button:disabled{background:#666;opacity:.6;cursor:not-allowed}
+#roomCode{color:#ffd84d;letter-spacing:3px}
+#slots .slot{display:flex;align-items:center;gap:8px;border:2px solid;border-radius:10px;padding:6px 10px;margin:8px 0;background:#0003;font-size:16px}
+#slots .dot{width:14px;height:14px;border-radius:50%}#slots .rd{margin-left:auto;font-size:13px;opacity:.8}#slots .rd.on{color:#9f9;opacity:1}
+#slots .slot button{margin:0;padding:4px 10px;font-size:13px;background:#a33}#slots .empty{opacity:.5}
+#chatLog{height:90px;overflow:auto;background:#0004;border-radius:8px;padding:6px;font-size:13px;margin-top:10px}#chatIn{margin-top:6px}

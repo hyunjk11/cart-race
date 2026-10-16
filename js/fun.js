@@ -75,7 +75,7 @@ export function createFun(G) {
   for (const f of [0.18, 0.47, 0.76]) for (const lat of [-3.2, 0, 3.2]) { const p = atLane(Math.round(N * f), lat); const m = new THREE.Mesh(boxGeo, qMat); m.position.set(p.x, 1.1, p.z); scene.add(m); boxes.push({ x: p.x, z: p.z, m, cd: 0 }); }
 
   // ---------- hazards & projectiles ----------
-  const hazards = [], projs = [];
+  const hazards = [], projs = []; let hid = 0;
   const banG = new THREE.TorusGeometry(0.25, 0.08, 6, 10, Math.PI * 1.3), banM = lm(0xffe135);
   const pudM = new THREE.MeshBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.55, depthWrite: false });
   function signMesh() { const g = new THREE.Group(); const a = new THREE.Mesh(new THREE.ConeGeometry(0.4, 1.0, 4, 1, true), new THREE.MeshLambertMaterial({ color: 0xffd600, side: THREE.DoubleSide })); a.position.y = 0.5; g.add(a);
@@ -85,14 +85,14 @@ export function createFun(G) {
     if (type === 'banana') { mesh = new THREE.Mesh(banG, banM); mesh.rotation.x = -Math.PI / 2; mesh.position.set(x, 0.1, z); }
     else if (type === 'puddle') { mesh = new THREE.Mesh(new THREE.CircleGeometry(r, 20), pudM); mesh.rotation.x = -Math.PI / 2; mesh.position.set(x, 0.02, z); }
     else { mesh = signMesh(); mesh.position.set(x, 0, z); }
-    scene.add(mesh); const h = { type, x, z, life, r, owner, mesh, arm: 0.5 }; hazards.push(h); return h;
+    scene.add(mesh); const h = { id: ++hid, type, x, z, life, r, owner, mesh, arm: 0.5 }; hazards.push(h); return h;
   }
   function removeHazard(h) { scene.remove(h.mesh); hazards.splice(hazards.indexOf(h), 1); }
   const bagG = new THREE.BoxGeometry(0.5, 0.55, 0.3), bagM = lm(0xff7043);
   function aheadOf(c) { let best = null, bd = 1e9; for (const o of carts) { if (o === c || o.finished) continue; const d = o.prog - c.prog; if (d > 0 && d < bd) { bd = d; best = o; } } return best; }
   function hit(c, by) {
     if (c.shieldT > 0) { c.shieldT = 0; G.say(c, '실드로 막았다!', 1.3, true); G.puff(c.x, 1, c.z, 0x80d8ff, 6); return; }
-    c.spin = 1.1; c.v *= 0.35; c.drifting = false; G.puff(c.x, 0.8, c.z, 0xffffff, 6);
+    c.hitSeq = (c.hitSeq || 0) + 1; c.spin = 1.1; c.v *= 0.35; c.drifting = false; G.puff(c.x, 0.8, c.z, 0xffffff, 6);
     G.say(c, ['으아악~', '빙글빙글~', '누구야!'][(Math.random() * 3) | 0], 1.5, true);
     if (c === G.player) { G.shakeIt(0.7); G.flash('당했다! 🌀'); sound.bump(1); } else if (by === G.player) { G.flash(`${c.name} 명중! 🎯`); sound.oof(); }
   }
@@ -102,7 +102,7 @@ export function createFun(G) {
     if (it === 'banana') addHazard('banana', c.x - fx * 2.4, c.z - fz * 2.4, 30, 1.2, c);
     else if (it === 'puddle') addHazard('puddle', c.x - fx * 3.5, c.z - fz * 3.5, 14, 2.2, c);
     else if (it === 'sign') addHazard('sign', c.x - fx * 2.6, c.z - fz * 2.6, 30, 1.0, c);
-    else if (it === 'bag') { const m = new THREE.Mesh(bagG, bagM); m.position.set(c.x + fx * 2, 1.2, c.z + fz * 2); scene.add(m); projs.push({ m, x: c.x + fx * 2, z: c.z + fz * 2, h: c.h, life: 4, owner: c, target: aheadOf(c) }); sound.whoosh(); }
+    else if (it === 'bag') { const m = new THREE.Mesh(bagG, bagM); m.position.set(c.x + fx * 2, 1.2, c.z + fz * 2); scene.add(m); projs.push({ id: ++hid, m, x: c.x + fx * 2, z: c.z + fz * 2, h: c.h, life: 4, owner: c, target: aheadOf(c) }); sound.whoosh(); }
     else if (it === 'shield') { c.shieldT = 7; }
     else if (it === 'magnet') { c.magnetT = 3.5; c.magTarget = aheadOf(c); }
     if (c === G.player) G.flash(`${ITEMS[it].icon} ${ITEMS[it].name}!`);
@@ -126,20 +126,21 @@ export function createFun(G) {
     // teleport the far ones closer (they "arrive" from side aisles)
     free.forEach((cu, k) => { if (Math.hypot(cu.x - x, cu.z - z) > 30) { const p = atLane(G.player.idx + 50 + k * 3, (Math.random() * 2 - 1) * 3); cu.x = p.x; cu.z = p.z; } });
   }
-  function startEvent(name) {
+  function startEvent(name, fi) {
+    const SA = (d, st) => { const i = fi ?? spotAhead(d, st); ev.spotI = i; return i; };
     ev.name = name; ev.t = 0; ev.log.push(name); sound.chime(); G.announce(EVN[name]);
-    if (name === 'timesale') { const i = spotAhead(28), p = atLane(i, 0); ev.dur = 14; ev.spot = p; rushCustomers(p.x, p.z, 8, 13);
+    if (name === 'timesale') { const i = SA(28), p = atLane(i, 0); ev.dur = 14; ev.spot = p; rushCustomers(p.x, p.z, 8, 13);
       const s = G.textSprite('⏰ 타임세일 50%', '#d50000'); s.position.set(p.x, 3.6, p.z); s.scale.set(5, 1.25, 1); scene.add(s); ev.objs.push(s); }
-    else if (name === 'cleaning') { const i = spotAhead(26), p = atLane(i, 0); ev.dur = 16; ev.objs.push(addHazard('puddle', p.x, p.z, 16, 4.2, null));
+    else if (name === 'cleaning') { const i = SA(26), p = atLane(i, 0); ev.dur = 16; ev.objs.push(addHazard('puddle', p.x, p.z, 16, 4.2, null));
       for (const lat of [-4, 4]) { const q2 = atLane(i, lat); ev.objs.push(addHazard('sign', q2.x, q2.z, 16, 0.9, null)); } }
-    else if (name === 'tasting') { const i = spotAhead(30, true), [tx, tz] = tangent(i), lat = HW - 1.6, p = atLane(i, lat);
+    else if (name === 'tasting') { const i = SA(30, true), [tx, tz] = tangent(i), lat = HW - 1.6, p = atLane(i, lat);
       const w = Math.abs(tx) > 0.5 ? 2.4 : 1.1, d = Math.abs(tx) > 0.5 ? 1.1 : 2.4; ev.stand = stand(p.x, p.z, w, d, '🍢 시식 코너'); ev.dur = 16;
       const c = atLane(i, lat - 2); rushCustomers(c.x, c.z, 6, 15); }
     else if (name === 'blackout') { ev.dur = 7; }
-    else if (name === 'vip') { const i = spotAhead(22); const g = makeCart(0xffd700, { shirt: 0x212121, hat: 0xffd700, hair: 0x111111, pants: 0x212121 }); g.root.scale.setScalar(2.1); scene.add(g.root);
+    else if (name === 'vip') { const i = SA(22); const g = makeCart(0xffd700, { shirt: 0x212121, hat: 0xffd700, hair: 0x111111, pants: 0x212121 }); g.root.scale.setScalar(2.1); scene.add(g.root);
       const crown = G.textSprite('👑 VIP', '#6a1b9a'); crown.position.y = 2.6; crown.scale.set(1.6, 0.5, 1); g.root.add(crown);
       ev.vip = { g, idx: i, x: path[i].x, z: path[i].y, h: 0 }; ev.dur = 28; G.say({ g }, '비켜라, VIP 나가신다!', 2.5, true); }
-    else if (name === 'spill') { const i = spotAhead(26, true), [tx, tz] = tangent(i); const g = new THREE.Group();
+    else if (name === 'spill') { const i = SA(26, true), [tx, tz] = tangent(i); const g = new THREE.Group();
       const base = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.5, 2.2), lm(0xff6f00)); base.position.y = 0.4; g.add(base);
       for (let k = 0; k < 4; k++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 0.6), lm(0xbcaaa4)); b.position.set((k % 2 - 0.5) * 0.65, 0.95, ((k >> 1) - 0.5) * 0.9); g.add(b); }
       const mast = new THREE.Mesh(new THREE.BoxGeometry(0.15, 2.2, 0.15), lm(0x424242)); mast.position.set(0, 1.4, -1.0); g.add(mast);
@@ -176,8 +177,9 @@ export function createFun(G) {
   }
 
   // ---------- per-frame ----------
-  function update(dt, state, raceT) {
+  function update(dt, state, raceT, guest) {
     updateSkids(dt);
+    if (guest) return guestUpdate(dt);
     const t = performance.now() / 1000;
     for (const b of boxes) {
       b.cd -= dt; b.m.visible = b.cd <= 0; b.m.rotation.set(t * 0.7, t * 1.3, 0); b.m.position.y = 1.1 + Math.sin(t * 2 + b.x) * 0.15;
@@ -214,5 +216,43 @@ export function createFun(G) {
     if (obstacles.vip) obstacles.push({ x: obstacles.vip.x, z: obstacles.vip.z, r: 3.2 });
     if (obstacles.fork) obstacles.push({ x: obstacles.fork.x, z: obstacles.fork.z, r: 2 });
   }
-  return { update, skid, useItem, obstacles, hazards, projs, boxes, props, ev, startEvent, ITEMS };
+  // ---------- network: host snapshot / guest mirror ----------
+  function guestUpdate(dt) {
+    const t = performance.now() / 1000, P = G.player;
+    for (const b of boxes) { b.m.visible = b.cd <= 0; b.m.rotation.set(t * 0.7, t * 1.3, 0); b.m.position.y = 1.1 + Math.sin(t * 2 + b.x) * 0.15; }
+    P.slipT = Math.max(0, (P.slipT || 0) - dt);
+    for (const h of hazards) if (h.type === 'puddle' && Math.hypot(P.x - h.x, P.z - h.z) < h.r) P.slipT = 0.35;
+    for (const c of carts) c.shieldMesh.visible = (c.shieldT || 0) > 0;
+    for (const p of projs) { p.m.position.set(p.x, 1.2, p.z); p.m.rotation.y += dt * 10; }
+    if (ev.vip && ev.vipT) { const V = ev.vip, k = Math.min(1, dt * 10); V.x += (ev.vipT[0] - V.x) * k; V.z += (ev.vipT[1] - V.z) * k; V.g.root.position.set(V.x, 0, V.z); V.g.root.rotation.y = ev.vipT[2]; V.g.update(7, dt); }
+    if (ev.fork && ev.forkT) { ev.fork.g.position.set(ev.forkT[0], 0, ev.forkT[1]); ev.fork.g.rotation.y = ev.forkT[2]; }
+    if (ev.name === 'blackout') { ev.t += dt; setDim(ev.t < 0.6 ? (Math.random() < 0.5 ? 1 : 0.3) : 1); }
+  }
+  const r2 = v => Math.round(v * 100) / 100;
+  function snap() {
+    return { hz: hazards.map(h => [h.id, h.type, r2(h.x), r2(h.z), h.r]), pj: projs.map(p => [p.id, r2(p.x), r2(p.z)]), bx: boxes.map(b => b.cd > 0 ? 1 : 0),
+      ev: ev.name ? { n: ev.name, i: ev.spotI, v: ev.vip ? [r2(ev.vip.x), r2(ev.vip.z), r2(ev.vip.h)] : null, f: ev.fork ? [r2(ev.fork.g.position.x), r2(ev.fork.g.position.z), r2(ev.fork.g.rotation.y)] : null } : null,
+      pp: props.map(p => { const b = p.body; return [r2(b.position.x), r2(b.position.y), r2(b.position.z), r2(b.quaternion.x), r2(b.quaternion.y), r2(b.quaternion.z), r2(b.quaternion.w)]; }) };
+  }
+  let guestInit = false;
+  function applySnap(S) {
+    if (!guestInit) { guestInit = true; for (const p of props) world.removeBody(p.body); }
+    const ids = new Set(S.hz.map(h => h[0]));
+    for (let i = hazards.length - 1; i >= 0; i--) if (!ids.has(hazards[i].id)) removeHazard(hazards[i]);
+    for (const [id, type, x, z, r] of S.hz) if (!hazards.find(h => h.id === id)) { const h = addHazard(type, x, z, 999, r, null); h.id = id; }
+    const pids = new Set(S.pj.map(p => p[0]));
+    for (let i = projs.length - 1; i >= 0; i--) if (!pids.has(projs[i].id)) { G.puff(projs[i].x, 1.2, projs[i].z, 0xff7043, 5); scene.remove(projs[i].m); projs.splice(i, 1); }
+    for (const [id, x, z] of S.pj) { let p = projs.find(q => q.id === id); if (!p) { p = { id, m: new THREE.Mesh(bagG, bagM), x, z }; scene.add(p.m); projs.push(p); } p.x = x; p.z = z; }
+    S.bx.forEach((v, i) => { if (boxes[i]) boxes[i].cd = v ? 1 : 0; });
+    (S.pp || []).forEach((a, i) => { const p = props[i]; if (!p) return; p.mesh.position.set(a[0], a[1], a[2]); p.mesh.quaternion.set(a[3], a[4], a[5], a[6]); });
+    if (S.ev && ev.name !== S.ev.n) {
+      if (ev.name) endEvent();
+      const before = new Set(hazards); startEvent(S.ev.n, S.ev.i);
+      for (const h of [...hazards]) if (!before.has(h)) removeHazard(h); // event hazards come from the host mirror instead
+      ev.objs = ev.objs.filter(o => !o.type);
+    } else if (!S.ev && ev.name) endEvent();
+    if (S.ev) { ev.vipT = S.ev.v; ev.forkT = S.ev.f; }
+  }
+  function reset() { if (ev.name) endEvent(); for (const h of [...hazards]) removeHazard(h); for (const p of projs) scene.remove(p.m); projs.length = 0; for (const b of boxes) b.cd = 0; ev.next = 18 + Math.random() * 8; for (const c of carts) { c.shieldT = 0; c.magnetT = 0; c.item = null; } }
+  return { update, snap, applySnap, reset, EVN, skid, useItem, obstacles, hazards, projs, boxes, props, ev, startEvent, ITEMS };
 }

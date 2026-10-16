@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { HX, HZ, HW, LAPS, buildPath, shelfStrips, buildWorld, textSprite } from './track.js';
 import { createFun, ITEMS } from './fun.js';
+import { initNet, NET, hostResults } from './net.js';
 import { makeCart, makePerson } from './models.js';
 import { initAudio, sound, setEngine, setDrift, setMuted, isMuted, onMuteChange } from './audio.js';
 
@@ -23,6 +24,8 @@ world.defaultContactMaterial.friction = 0.4; world.defaultContactMaterial.restit
 
 const path = buildPath(), N = path.length;
 const strips = shelfStrips();
+// shared seed: every client builds an identical store (shelves, products, displays)
+const _rand = Math.random; { let a = 20261016; Math.random = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const shelf = buildWorld(scene, world, strips);
 const _m4 = new THREE.Matrix4().makeScale(0, 0, 0);
 function removeShelfItems(x, z, n) { // hide products near impact
@@ -32,12 +35,12 @@ function removeShelfItems(x, z, n) { // hide products near impact
 // ---------- input ----------
 const keys = {};
 const pressEdge = k => { if (k === 'Space') player.useN2O = true; if (k === 'KeyE' || k === 'ControlLeft' || k === 'ControlRight' || k === 'Item') player.useItem = true; };
-addEventListener('keydown', e => { if (!e.repeat) pressEdge(e.code); keys[e.code] = true; if (e.code === 'KeyR') location.reload(); if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault(); });
+addEventListener('keydown', e => { if (!e.repeat) pressEdge(e.code); keys[e.code] = true; if (e.code === 'KeyR' && MODE === 'solo' && !e.target.closest?.('input')) location.reload(); if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault(); });
 addEventListener('keyup', e => { keys[e.code] = false; });
 $('restart').onclick = () => location.reload();
-function startGame() { initAudio(); $('title').classList.add('hidden'); if (state === 'title') { state = 'countdown'; cd = 3.99; } }
+function startGame() { initAudio(); $('title').classList.add('hidden'); if ((state === 'title' || state === 'lobby') && MODE === 'solo') startRaceMP(SOLO_SLOTS(), 0, 'solo'); }
 $('startBtn').addEventListener('click', startGame);
-addEventListener('keydown', e => { if (state === 'title' && (e.code === 'Enter' || e.code === 'Space')) startGame(); });
+addEventListener('keydown', e => { if (state === 'title' && !$('title').classList.contains('hidden') && (e.code === 'Enter' || e.code === 'Space')) startGame(); });
 const unlock = () => initAudio();
 ['pointerdown', 'keydown', 'touchstart'].forEach(ev => addEventListener(ev, unlock, { passive: true }));
 const muteBtn = $('mute'); const showMute = m => muteBtn.textContent = m ? '🔇' : '🔊'; showMute(isMuted()); onMuteChange(showMute);
@@ -63,7 +66,7 @@ function addCart(color, name, lane, row, ai, pal) {
   const g = makeCart(color, pal); scene.add(g.root);
   const body = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, shape: new CANNON.Box(new CANNON.Vec3(0.7, 0.7, 1.6)) });
   world.addBody(body);
-  const c = { g, body, name, ai, color, x: -4 - row * 5, z: -HZ + lane, h: Math.PI / 2, v: 0, idx: 0, lap: 0, finished: false, time: 0,
+  const c = { g, body, name, baseName: name, ai, color, x: -4 - row * 5, z: -HZ + lane, h: Math.PI / 2, v: 0, idx: 0, lap: 0, finished: false, time: 0,
     maxV: ai ? 17 + Math.random() * 2.5 : 20, offset: lane * 0.6, vd: Math.PI / 2, n2o: 0, gauge: 0, combo: 0, item: null, stuck: 0, prog: 0 };
   c.idx = nearestIdx(c.x, c.z, 0, N); c.lap = c.idx > N / 2 ? -1 : 0; carts.push(c); return c;
 }
@@ -72,7 +75,7 @@ function nearestIdx(x, z, from, span) {
   for (let k = 0; k < span; k++) { const i = (from + k + N) % N; const d = (path[i].x - x) ** 2 + (path[i].y - z) ** 2; if (d < bd) { bd = d; bi = i; } }
   return bi;
 }
-const player = addCart(0xff4f8b, '나', -2.5, 0, false, { shirt: 0xffd54f, hat: 0xff4f8b, hair: 0x6d3b1f, pants: 0x4fc3f7 });
+let player = addCart(0xff4f8b, '나', -2.5, 0, false, { shirt: 0xffd54f, hat: 0xff4f8b, hair: 0x6d3b1f, pants: 0x4fc3f7 });
 addCart(0x43d17a, '초록 카트', 2.5, 0, true, { shirt: 0xb2ff59, hat: 0x2ecc71, hair: 0x3b2b20, pants: 0x8d6e63 });
 addCart(0xffc107, '노랑 카트', -2.5, 1, true, { shirt: 0xff8a65, hat: 0xffc107, hair: 0xf4d03f, pants: 0x7e57c2 });
 addCart(0x9c5cff, '보라 카트', 2.5, 1, true, { shirt: 0x80deea, hat: 0x9c5cff, hair: 0x222244, pants: 0xf06292 });
@@ -92,13 +95,14 @@ const PKINDS = [ // spillable product kinds
   { g: new THREE.BoxGeometry(0.38, 0.6, 0.16), s: () => new CANNON.Box(new CANNON.Vec3(0.19, 0.3, 0.08)), mass: 0.3 },
 ];
 function spawnProduct(x, y, z, vx, vy, vz) {
+  if (MODE === 'guest') { NET.send({ t: 'spawn', a: [x, y, z, vx, vy, vz].map(r2) }); return; }
   let p;
   if (products.length >= MAXP) { p = products.shift(); }
   else {
     const K = PKINDS[(Math.random() * PKINDS.length) | 0];
     const mesh = new THREE.Mesh(K.g, K.m || pMats[(Math.random() * pMats.length) | 0]); scene.add(mesh);
     const body = new CANNON.Body({ mass: K.mass, shape: K.s(), linearDamping: K.ld ?? 0.3, angularDamping: K.ld ?? 0.3, sleepSpeedLimit: 0.3 });
-    world.addBody(body); p = { mesh, body };
+    world.addBody(body); p = { mesh, body, k: PKINDS.indexOf(K) };
   }
   p.body.position.set(x, y, z); p.body.velocity.set(vx, vy, vz);
   p.body.angularVelocity.set(Math.random() * 10 - 5, Math.random() * 10 - 5, Math.random() * 10 - 5); p.body.wakeUp();
@@ -127,6 +131,7 @@ function pushOut(o, r) { // keep a point out of shelf bounds; returns true if it
     if (d < r) { hit = true; const nx = d > 1e-4 ? dx / d : s.nx, nz = d > 1e-4 ? dz / d : s.nz; o.x = px + nx * r; o.z = pz + nz * r; } }
   return hit;
 }
+const nRiders = c => c.riders && c.riders.length ? c.riders.length : (c.riderN || 0);
 function retarget(cu) { delete cu.pi; pickTarget(cu); }
 const insideShelf = (x, z) => strips.some(s => x > s.x0 && x < s.x1 && z > s.z0 && z < s.z1);
 for (let k = 0; k < 16; k++) {
@@ -195,6 +200,9 @@ let state = 'title', cd = 3.99, raceT = 0; const finishOrder = [];
 const ang = a => Math.atan2(Math.sin(a), Math.cos(a));
 
 function updateCart(c, dt) {
+  if (c.inactive) return;
+  if (c.net) return netFollow(c, dt);
+  if (c.remote) return applyRemote(c, dt);
   c.lastHit = (c.lastHit || 0) - dt;
   let thr = 0, steer = 0, boosting = false;
   if (state !== 'race' || c.finished) { thr = c.finished ? -0.3 * Math.sign(c.v) : 0; }
@@ -236,8 +244,8 @@ function updateCart(c, dt) {
     if ((counter || upHit || aiHit) && c.driftT > 0.3) { c.instWin = 0; c.instT = 0.7; c.v += 3.5; c.instCount = (c.instCount || 0) + 1; if (!c.ai) { flash('⚡ 순간 부스트!'); sound.whoosh(); } } }
   c.comboT = (c.comboT || 0) - dt; if (c.comboT <= 0) c.combo = 0;
   c.steerIn = steer;
-  const maxV = c.maxV * (boosting ? 1.45 : 1) * (c.push && autoAccel ? 1.1 : 1) * (c.magnetT > 0 ? 1.15 : 1) * (1 - 0.12 * (c.riders ? c.riders.length : 0));
-  if (thr > 0) c.v += (boosting ? 22 : 12) * (1 - 0.12 * (c.riders ? c.riders.length : 0)) * dt * (1 - Math.max(0, c.v) / maxV);
+  const maxV = c.maxV * (boosting ? 1.45 : 1) * (c.push && autoAccel ? 1.1 : 1) * (c.magnetT > 0 ? 1.15 : 1) * (1 - 0.12 * nRiders(c));
+  if (thr > 0) c.v += (boosting ? 22 : 12) * (1 - 0.12 * nRiders(c)) * dt * (1 - Math.max(0, c.v) / maxV);
   else if (thr < 0) c.v -= (c.v > 0 ? 30 : 8) * dt;
   c.v -= c.v * 0.6 * dt; if (c.v < -6) c.v = -6;
   if (thr === 0 && Math.abs(c.v) < 0.3) c.v = 0;
@@ -253,22 +261,24 @@ function updateCart(c, dt) {
   shelfCollide(c, dt);
   // progress
   const ni = nearestIdx(c.x, c.z, c.idx - 3, 14);
-  if (c.idx > N - 8 && ni < 8) { c.lap++; if (c.lap >= LAPS && !c.finished) { c.finished = true; c.time = raceT; finishOrder.push(c); if (!c.ai) { sound.fanfare(); endRace(); } } else if (!c.ai && c.lap < LAPS) { flash(`랩 ${c.lap + 1}/${LAPS}!`); sound.lap(); } }
+  if (c.idx > N - 8 && ni < 8) { c.lap++; if (c.lap >= LAPS && !c.finished) { c.finished = true; c.time = raceT; finishOrder.push(c); if (c === player) { sound.fanfare(); if (MODE === 'solo') endRace(); else mpFinish(); } } else if (!c.ai && c.lap < LAPS) { flash(`랩 ${c.lap + 1}/${LAPS}!`); sound.lap(); } }
   else if (c.idx < 8 && ni > N - 8) c.lap--;
   c.idx = ni; c.prog = c.finished ? 1e6 - c.time : c.lap * N + c.idx;
 }
 
 function interactions(dt) {
   for (const c of carts) {
+    if (c.inactive) continue;
     const fx = Math.sin(c.h), fz = Math.cos(c.h);
-    for (const o of carts) if (o !== c && circlePush(c, o.x, o.z, CART_R * 1.8, 0.985) && !c.ai && (c.cbump || 0) <= 0) { sound.bump(0.7); c.cbump = 0.5; }
+    for (const o of carts) if (o !== c && !o.inactive && circlePush(c, o.x, o.z, CART_R * 1.8, 0.985) && c === player && (c.cbump || 0) <= 0) { sound.bump(0.7); c.cbump = 0.5; }
     c.cbump = (c.cbump || 0) - dt;
+    if (MODE === 'guest') { guestBumps(c); c.bump = (c.bump || 0) - dt; continue; }
     for (const cu of customers) {
       if (cu.state === 'walk') {
         const cx = c.x + fx * 1.2, cz = c.z + fz * 1.2;
         if (Math.hypot(cx - cu.x, cz - cu.z) < 1.0 || Math.hypot(c.x - cu.x, c.z - cu.z) < 1.3) {
           if (Math.abs(c.v) > 9) { knockCustomer(cu, c); c.v *= 0.75; if (!c.ai || Math.hypot(c.x - player.x, c.z - player.z) < 25) sound.oof(); }
-          else { c.v *= 0.5; cu.x += fx * 0.6; cu.z += fz * 0.6; if (!c.ai && (c.bump || 0) <= 0) { flash('앗, 죄송합니다! 🙇'); sound.bump(0.6); c.bump = 1; } }
+          else { c.v *= 0.5; cu.x += fx * 0.6; cu.z += fz * 0.6; if (c === player && (c.bump || 0) <= 0) { flash('앗, 죄송합니다! 🙇'); sound.bump(0.6); c.bump = 1; } }
         }
         else if (Math.abs(c.v) > 8 && Math.hypot(c.x - cu.x, c.z - cu.z) < 3.2 && Math.random() < 0.05) say(cu, pick(['조심해요!', '어머나!', '천천히 좀!', '위험해요!']), 1.5);
       } else if (cu.body) circlePush(c, cu.body.position.x, cu.body.position.z, 1.7, 0.9); // fallen customers block
@@ -331,6 +341,7 @@ const pick = a => a[(Math.random() * a.length) | 0];
 const bubbleLayer = $('bubbles'), bubbles = []; const MAXB = 4;
 function say(ent, text, dur = 2, force = false) {
   const now = performance.now() / 1000; if (!force && (ent.sayCd || 0) > now) return;
+  if (MODE === 'host') netSay(ent, text, dur);
   if (bubbles.length >= MAXB) { if (!force) return; const old = bubbles.shift(); old.el.remove(); }
   const pos = ent.holder ? ent.holder.position : ent.g.root.position; if (!force && pos.distanceTo(camera.position) > 30) return;
   const ex = bubbles.find(b => b.ent === ent); if (ex) { ex.el.remove(); bubbles.splice(bubbles.indexOf(ex), 1); }
@@ -369,14 +380,141 @@ function drawMinimap() {
   mctx.strokeStyle = 'rgba(255,255,255,.55)'; mctx.lineWidth = 7; mctx.beginPath(); path.forEach((p, i) => i ? mctx.lineTo(sx(p.x), sz(p.y)) : mctx.moveTo(sx(p.x), sz(p.y))); mctx.closePath(); mctx.stroke();
   mctx.fillStyle = '#fff'; mctx.fillRect(sx(0) - 1, sz(-HZ) - 5, 2, 10);
   for (const cu of customers) { const x = cu.body ? cu.body.position.x : cu.x, z = cu.body ? cu.body.position.z : cu.z; mctx.fillStyle = cu.state === 'walk' ? '#bbb' : '#f44'; mctx.fillRect(sx(x) - 1, sz(z) - 1, 2, 2); }
-  for (const c of carts) { mctx.fillStyle = '#' + c.color.toString(16).padStart(6, '0'); mctx.beginPath(); mctx.arc(sx(c.x), sz(c.z), c === player ? 4.5 : 3.5, 0, 7); mctx.fill(); if (c === player) { mctx.strokeStyle = '#fff'; mctx.lineWidth = 1.5; mctx.stroke(); } }
+  for (const c of carts) { if (c.inactive) continue; mctx.fillStyle = '#' + c.color.toString(16).padStart(6, '0'); mctx.beginPath(); mctx.arc(sx(c.x), sz(c.z), c === player ? 4.5 : 3.5, 0, 7); mctx.fill(); if (c === player) { mctx.strokeStyle = '#fff'; mctx.lineWidth = 1.5; mctx.stroke(); } }
 }
 
 // ---------- fun systems: drift FX, items, events ----------
 let annT = null;
 function announce(t) { const el = $('event'); el.textContent = '📢 ' + t; el.classList.add('show'); clearTimeout(annT); annT = setTimeout(() => el.classList.remove('show'), 3500); }
-const fun = createFun({ scene, world, carts, path, N, strips, customers, sound, player, textSprite, say, puff, flash, spawnProduct, stats, insideShelf, circlePush, announce, retarget, pushOut,
+const fun = createFun({ scene, world, carts, path, N, strips, customers, sound, get player() { return player; }, textSprite, say, puff, flash, spawnProduct, stats, insideShelf, circlePush, announce, retarget, pushOut,
   shakeIt: k => { shake = Math.max(shake, k); }, lights: { hemi, dl, dl2 } });
+Math.random = _rand;
+
+// ---------- multiplayer glue (host-authoritative; see net.js) ----------
+let MODE = 'solo', netAcc = 0, snapN = 0, mpDone = false, firstFinT = 0;
+const r2 = v => Math.round(v * 100) / 100;
+const GRID = i => ({ x: -4 - (i >> 1) * 5, z: -HZ + (i % 2 ? 2.5 : -2.5) });
+const CU_ST = ['walk', 'down', 'rise', 'ride'];
+function resetCart(c, i) {
+  if (c.riders && c.riders.length) hopOut(c);
+  const g = GRID(i);
+  Object.assign(c, { x: g.x, z: g.z, h: Math.PI / 2, vd: Math.PI / 2, v: 0, finished: false, time: 0, n2o: 0, gauge: 0, combo: 0, item: null, spin: 0, boostT: 0, instT: 0,
+    drifting: false, slip: 0, riderN: 0, stuck: 0, reverse: 0, magnetT: 0, shieldT: 0, hitSeq: 0, hitSeqSeen: 0, rs: null, ns: null, net: false, remote: false, inactive: false, useItem: false, useN2O: false });
+  c.idx = nearestIdx(c.x, c.z, 0, N); c.lap = c.idx > N / 2 ? -1 : 0; c.prog = c.lap * N + c.idx;
+}
+function nameTag(c, name) {
+  if (c.tag) { c.g.root.remove(c.tag); c.tag = null; } if (!name) return;
+  c.tag = textSprite(name, '#' + c.color.toString(16).padStart(6, '0')); c.tag.position.y = 2.7; c.tag.scale.set(1.5, 0.38, 1); c.g.root.add(c.tag);
+}
+function startRaceMP(slots, you, mode) {
+  MODE = mode; fun.reset(); finishOrder.length = 0; raceT = 0; mpDone = false; firstFinT = 0; netAcc = 0;
+  carts.forEach((c, i) => {
+    resetCart(c, i); const s = slots[i];
+    c.inactive = !s; c.g.root.visible = !!s; c.name = s ? s.name : c.baseName;
+    c.ai = !!s && s.type === 'bot' && mode !== 'guest';
+    c.remote = mode === 'host' && !!s && s.type === 'human' && i !== you;
+    c.net = mode === 'guest' && i !== you;
+    if (c.inactive) { c.x = 999; c.z = 999; c.prog = -1e9; }
+    nameTag(c, mode !== 'solo' && s && i !== you ? s.name : null);
+  });
+  player = carts[you]; player.ai = false; player.name = slots[you] ? slots[you].name : '나';
+  $('finish').classList.add('hidden'); $('title').classList.add('hidden');
+  camPos.set(player.x - 8, 4.2, player.z); camLook.set(player.x + 4, 1.2, player.z);
+  state = 'countdown'; cd = 3.99; initAudio();
+}
+const SOLO_SLOTS = () => carts.map((c, i) => ({ type: i ? 'bot' : 'human', name: c.baseName }));
+function onRemoteState(i, s) { const c = carts[i]; if (c && c.remote) c.rs = s; }
+function onRemoteItem(i) { const c = carts[i]; if (c && c.remote) c.useItem = true; }
+function onSpawn(a) { if (MODE === 'host' && products.length < MAXP + 20) spawnProduct(...a.slice(0, 6).map(Number)); }
+function slotToBot(i) { const c = carts[i]; if (!c) return; c.remote = false; c.ai = true; c.name += ' (봇)'; nameTag(c, c.name); NET.broadcast({ t: 'slots', names: carts.map(c => c.name) }); }
+function onSlots(m) { (m.names || []).forEach((n, i) => { const c = carts[i]; if (c && c !== player && !c.inactive && c.name !== n) { c.name = n; nameTag(c, n); } }); }
+function applyRemote(c, dt) {
+  const s = c.rs; if (!s) return; const k = Math.min(1, dt * 15);
+  c.x += (s[0] - c.x) * k; c.z += (s[1] - c.z) * k; c.h = s[2]; c.vd = s[3]; c.v = s[4]; c.drifting = !!s[5]; c.slip = s[6]; c.lap = s[7]; c.idx = s[8]; c.steerIn = s[11];
+  if (s[9] && !c.finished) { c.finished = true; c.time = s[10]; finishOrder.push(c); }
+  c.prog = c.finished ? 1e6 - c.time : c.lap * N + c.idx;
+}
+function netFollow(c, dt) {
+  const s = c.ns; if (!s) return; const k = Math.min(1, dt * 10);
+  if (Math.hypot(s[0] - c.x, s[1] - c.z) > 12) { c.x = s[0]; c.z = s[1]; }
+  c.x += (s[0] - c.x) * k; c.z += (s[1] - c.z) * k; c.h += ang(s[2] - c.h) * k; c.vd = s[3]; c.v = s[4]; c.drifting = !!s[5]; c.slip = s[6];
+  c.lap = s[7]; c.idx = s[8]; c.prog = s[9]; c.finished = !!s[10]; c.time = s[11]; c.shieldT = s[13] ? 1 : 0; c.riderN = s[14];
+}
+function makeSnap(full) {
+  const S = Object.assign({ t: 'snap',
+    c: carts.map(c => c.inactive ? null : [r2(c.x), r2(c.z), r2(c.h), r2(c.vd), r2(c.v), c.drifting ? 1 : 0, r2(c.slip || 0), c.lap, c.idx, Math.round(c.prog), c.finished ? 1 : 0, r2(c.time), c.item, c.shieldT > 0 ? 1 : 0, nRiders(c), c.hitSeq || 0]),
+    cu: customers.map(cu => { const p = cu.holder.position, q = cu.holder.quaternion; return [r2(p.x), r2(p.y), r2(p.z), r2(q.x), r2(q.y), r2(q.z), r2(q.w), CU_ST.indexOf(cu.state)]; }) }, fun.snap());
+  if (full) S.pr = products.map(p => { const b = p.body; return [p.k, r2(b.position.x), r2(b.position.y), r2(b.position.z), r2(b.quaternion.x), r2(b.quaternion.y), r2(b.quaternion.z), r2(b.quaternion.w)]; });
+  else delete S.pp;
+  return S;
+}
+const mirror = [];
+function onSnap(m) {
+  if (MODE !== 'guest') return;
+  m.c.forEach((a, i) => { const c = carts[i]; if (!a || !c) return;
+    if (c === player) { player.item = a[12]; player.shieldT = a[13] ? 1 : 0; player.riderN = a[14];
+      if (a[15] > (player.hitSeqSeen || 0)) { player.hitSeqSeen = a[15]; if (player.shieldT <= 0 || true) { player.spin = 1.1; player.v *= 0.35; player.drifting = false; shake = 0.7; flash('당했다! 🌀'); sound.bump(1); } } }
+    else c.ns = a; });
+  m.cu.forEach((a, i) => { if (customers[i]) customers[i].nt = a; });
+  if (m.pr) { m.pr.forEach((a, i) => { let mm = mirror[i]; const K = PKINDS[a[0]] || PKINDS[0];
+      if (!mm || mm.k !== a[0]) { if (mm) scene.remove(mm.mesh); mm = mirror[i] = { k: a[0], mesh: new THREE.Mesh(K.g, K.m || pMats[i % pMats.length]) }; scene.add(mm.mesh); }
+      mm.mesh.visible = true; mm.mesh.position.set(a[1], a[2], a[3]); mm.mesh.quaternion.set(a[4], a[5], a[6], a[7]); });
+    for (let i = m.pr.length; i < mirror.length; i++) mirror[i].mesh.visible = false; }
+  fun.applySnap(m);
+}
+const _q = new THREE.Quaternion();
+function guestCustomers(dt) {
+  const k = Math.min(1, dt * 10);
+  for (const cu of customers) { const a = cu.nt; if (!a) continue; const h = cu.holder, ox = h.position.x, oz = h.position.z;
+    if (Math.hypot(a[0] - ox, a[2] - oz) > 6) h.position.set(a[0], a[1], a[2]); else { h.position.x += (a[0] - ox) * k; h.position.y += (a[1] - h.position.y) * k; h.position.z += (a[2] - oz) * k; }
+    _q.set(a[3], a[4], a[5], a[6]); h.quaternion.slerp(_q, k); cu.state = CU_ST[a[7]] || 'walk'; h.scale.setScalar(cu.state === 'ride' ? 0.72 : 1);
+    const moved = Math.hypot(h.position.x - ox, h.position.z - oz); cu.t = (cu.t || 0) + moved * 4; cu.g.walk(cu.state === 'walk' && moved > 0.002 ? cu.t : 0);
+    cu.x = h.position.x; cu.z = h.position.z; }
+}
+function guestBumps(c) {
+  if (c !== player) return;
+  for (const cu of customers) if (cu.state === 'walk' && Math.hypot(c.x - cu.x, c.z - cu.z) < 1.3 && (c.bump || 0) <= 0) { c.v *= Math.abs(c.v) > 9 ? 0.75 : 0.5; c.bump = 0.6; sound.bump(0.6); }
+}
+function onSay(m) { const ent = m.k === 'u' ? customers[m.i] : carts[m.i]; if (ent && !ent.inactive) say(ent, m.text, m.dur, true); }
+function netSay(ent, text, dur) { const i = customers.indexOf(ent), j = carts.indexOf(ent); if (i >= 0) NET.broadcast({ t: 'say', k: 'u', i, text, dur }); else if (j >= 0) NET.broadcast({ t: 'say', k: 'c', i: j, text, dur }); }
+function myState() { const c = player; return [r2(c.x), r2(c.z), r2(c.h), r2(c.vd), r2(c.v), c.drifting ? 1 : 0, r2(c.slip || 0), c.lap, c.idx, c.finished ? 1 : 0, r2(c.time), c.steerIn || 0]; }
+function mpFinish() { flash('🏁 완주! 다른 참가자를 기다리는 중…'); msgT = 6; }
+function mpTick(dt) {
+  if (MODE === 'host' && (state === 'countdown' || state === 'race')) {
+    netAcc += dt; if (netAcc >= 1 / 15) { netAcc = 0; snapN++; NET.broadcast(makeSnap(snapN % 3 === 0)); }
+    if (state === 'race' && !mpDone) {
+      const humans = carts.filter(c => !c.inactive && (c === player || c.remote));
+      if (!firstFinT && carts.some(c => !c.inactive && c.finished)) firstFinT = raceT;
+      if (humans.every(c => c.finished) || (firstFinT && raceT - firstFinT > 30)) {
+        mpDone = true; const act = carts.filter(c => !c.inactive);
+        const order = [...finishOrder.filter(c => !c.inactive), ...act.filter(c => !c.finished).sort((a, b) => b.prog - a.prog)];
+        hostResults(order.map(c => ({ name: c.name, time: c.finished ? c.time : null, bot: !!c.ai })));
+      }
+    }
+  }
+  if (MODE === 'guest' && (state === 'countdown' || state === 'race')) {
+    netAcc += dt; if (netAcc >= 0.05) { netAcc = 0; NET.send({ t: 'st', s: myState() }); }
+    if (player.useItem) { player.useItem = false; if (player.item) NET.send({ t: 'item' }); }
+  }
+}
+function showResults(rows) {
+  state = 'finished'; $('finTitle').textContent = '🏁 경주 결과';
+  $('finBody').innerHTML = rows.map((r, i) => `${i + 1}위 ${r.name.replace(/[<>&]/g, '')}${r.bot ? ' 🤖' : ''} — ${r.time != null ? fmt(r.time) : '미완주'}`).join('<br>') + '<br><br><i>잠시 후 로비로 돌아갑니다…</i>';
+  $('restart').classList.add('hidden'); $('finish').classList.remove('hidden');
+}
+function toLobby() {
+  $('finish').classList.add('hidden'); $('restart').classList.remove('hidden'); fun.reset();
+  carts.forEach((c, i) => { const was = c.inactive; resetCart(c, i); c.inactive = was; if (was) { c.x = c.z = 999; } });
+  state = 'lobby'; $('countdown').textContent = '';
+}
+function leftRoom() {
+  MODE = 'solo'; fun.reset();
+  carts.forEach((c, i) => { resetCart(c, i); c.g.root.visible = true; c.ai = i > 0; c.name = c.baseName; nameTag(c, null); });
+  for (const cu of customers) { cu.nt = null; if (cu.state !== 'walk' || !cu.body) { if (cu.body) { world.removeBody(cu.body); cu.body = null; } cu.state = 'walk'; cu.cart = null; cu.rush = null; cu.holder.scale.setScalar(1); cu.holder.rotation.set(0, 0, 0); cu.x = cu.holder.position.x; cu.z = cu.holder.position.z; cu.holder.position.y = 0.85; pushOut(cu, 0.5); retarget(cu); } }
+  player = carts[0]; state = 'lobby'; $('finish').classList.add('hidden'); $('restart').classList.remove('hidden');
+}
+initNet({ startRace: startRaceMP, onRemoteState, onRemoteItem, onSpawn, slotToBot, onSnap, onSay, onSlots, showResults, toLobby, leftRoom,
+  onMenu: open => { if (state === 'title' || state === 'lobby') state = open ? 'lobby' : 'title'; } });
 
 // ---------- loop ----------
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
@@ -387,7 +525,7 @@ function frame(now) {
   step(dt); render(dt);
 }
 function step(dt) {
-  if (state === 'title') { $('countdown').textContent = ''; }
+  if (state === 'title' || state === 'lobby') { $('countdown').textContent = ''; }
   else if (state === 'countdown') {
     const before = Math.ceil(cd); cd -= dt; const n = Math.ceil(cd); if (n !== before && n > 0) sound.beep();
     $('countdown').textContent = cd > 0 ? n : '출발!';
@@ -396,16 +534,17 @@ function step(dt) {
   if (state === 'finished') for (const c of carts) if (!c.finished) { c.prog = c.lap * N + c.idx; }
   for (const c of carts) updateCart(c, dt);
   interactions(dt);
-  fun.update(dt, state, raceT);
-  updateCustomers(dt);
+  fun.update(dt, state, raceT, MODE === 'guest');
+  if (MODE === 'guest') guestCustomers(dt); else updateCustomers(dt);
   for (const c of carts) { c.body.position.set(c.x, 0.7, c.z + 0); c.body.quaternion.setFromEuler(0, c.h, 0); c.body.velocity.set(Math.sin(c.vd) * c.v, 0, Math.cos(c.vd) * c.v); }
   acc += dt; let n = 0; while (acc >= 1 / 60 && n < 3) { world.step(1 / 60); acc -= 1 / 60; n++; } if (n === 3) acc = 0;
   for (const c of carts) { c.body.position.set(c.x, 0.7, c.z); }
   for (const cu of customers) if (cu.body) { const bp = cu.body.position, o = { x: bp.x, z: bp.z }; if (pushOut(o, 0.45)) { bp.x = o.x; bp.z = o.z; cu.body.velocity.x *= -0.3; cu.body.velocity.z *= -0.3; } }
+  mpTick(dt);
   msgT -= dt; if (msgT <= 0) $('msg').textContent = '';
 }
 function render(dt) {
-  for (const c of carts) { c.g.root.position.set(c.x, 0, c.z); c.drift = (c.drift || 0) + ((c.steerIn || 0) * Math.min(1, Math.abs(c.v) / 18) * 0.28 - (c.drift || 0)) * Math.min(1, dt * 5); c.g.root.rotation.y = c.h + (c.drifting ? 0 : c.drift * 0.5); c.g.update(c.v, dt);
+  for (const c of carts) { if (c.inactive) continue; c.g.root.position.set(c.x, 0, c.z); c.drift = (c.drift || 0) + ((c.steerIn || 0) * Math.min(1, Math.abs(c.v) / 18) * 0.28 - (c.drift || 0)) * Math.min(1, dt * 5); c.g.root.rotation.y = c.h + (c.drifting ? 0 : c.drift * 0.5); c.g.update(c.v, dt);
     if (Math.abs(c.slip || 0) > 0.12 && Math.abs(c.v) > 5) { c.skT = (c.skT || 0) - dt; if (c.skT <= 0) { c.skT = 0.04; fun.skid(c); if (c.drifting && Math.random() < 0.5) puff(c.x - Math.sin(c.h) * 0.6, 0.2, c.z - Math.cos(c.h) * 0.6, Math.random() < 0.5 ? 0xffb300 : 0xdddddd, 1); } } }
   updatePuffs(dt); updateBubbles(); drawMinimap();
   for (const p of products) { p.mesh.position.copy(p.body.position); p.mesh.quaternion.copy(p.body.quaternion); }
@@ -422,20 +561,20 @@ function render(dt) {
   if (shake > 0) { shake = Math.max(0, shake - dt * 2); camera.position.x += (Math.random() - .5) * shake; camera.position.y += (Math.random() - .5) * shake * 0.6; }
   camera.fov = (innerWidth < innerHeight ? 80 : 65) + Math.max(0, p.v - 18) * 0.8; camera.updateProjectionMatrix();
   // HUD
-  const sorted = [...carts].sort((a, b) => b.prog - a.prog);
+  const active = carts.filter(c => !c.inactive), sorted = [...active].sort((a, b) => b.prog - a.prog);
   $('time').textContent = fmt(state === 'finished' ? p.time : raceT);
   $('lap').textContent = `${Math.min(LAPS, Math.max(1, p.lap + 1))}/${LAPS}`;
-  $('rank').textContent = `${(p.finished ? finishOrder.indexOf(p) : sorted.indexOf(p)) + 1}/${carts.length}`;
+  $('rank').textContent = `${(p.finished && finishOrder.includes(p) ? finishOrder.indexOf(p) : sorted.indexOf(p)) + 1}/${active.length}`;
   $('speed').textContent = `${Math.round(Math.abs(p.v) * 3.6)} km/h`;
   $('boostFill').style.width = `${p.gauge * 100}%`;
   $('n2o').innerHTML = [0, 1].map(i => `<span class="slot ${i < p.n2o ? 'full' : ''}">N2O</span>`).join('');
   $('itemSlot').innerHTML = p.item ? `<span class="ic">${ITEMS[p.item].icon}</span><span>${ITEMS[p.item].name}</span>` : '<span class="ic">❔</span><span>아이템 없음</span>';
   $('driftTxt').textContent = p.drifting ? `드리프트!${p.combo > 0 ? ' x' + (p.combo + 1) : ''}` : (p.combo > 1 ? `콤보 x${p.combo}` : '');
-  $('riders').textContent = p.riders && p.riders.length ? `🛒 탑승 손님 ${'🧍'.repeat(p.riders.length)} (-${p.riders.length * 12}% 속도)` : '';
+  $('riders').textContent = nRiders(p) ? `🛒 탑승 손님 ${'🧍'.repeat(nRiders(p))} (-${nRiders(p) * 12}% 속도)` : '';
   $('driftTxt').className = p.drifting ? 'on' : '';
   $('chaos').textContent = chaos(); $('knocked').textContent = stats.knocked; $('spilled').textContent = stats.spilled;
   renderer.render(scene, camera);
 }
 camPos.set(player.x - 8, 4.2, player.z); camLook.set(player.x + 4, 1.2, player.z);
 requestAnimationFrame(frame);
-window.__game = { knock: (i, c) => knockCustomer(customers[i], c || player), startGame, hopOut, fun, player, insideShelf, get autoAccel() { return autoAccel; }, carts, customers, products, stats, keys, get state() { return state; } };
+window.__game = { debugNearFinish() { const p = player, q = path[N - 4]; p.x = q.x; p.z = q.y; p.idx = N - 4; p.lap = LAPS - 1; p.h = p.vd = Math.PI / 2; p.v = 10; }, get MODE() { return MODE; }, NET, get player() { return player; }, get raceT() { return raceT; }, knock: (i, c) => knockCustomer(customers[i], c || player), startGame, hopOut, fun, insideShelf, get autoAccel() { return autoAccel; }, carts, customers, products, stats, keys, get state() { return state; } };
