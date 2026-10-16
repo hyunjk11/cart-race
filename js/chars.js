@@ -135,9 +135,9 @@ export function makeRacer(def, opt = {}) {
   // limbs
   const arms = [], legs = [];
   for (const s of [-1, 1]) {
-    const ap = new THREE.Group(); ap.position.set(s * 0.27, 0.84, 0.03); bob.add(ap);
-    const ag = [part(Cap(0.075, 0.26, 8), P.top === 0xffffff && id === 'bujang' ? 0xffffff : P.top, 0, -0.2, 0), part(S(0.085, 10, 8), id === 'ppoppi' ? P.top : P.skin, 0, -0.42, 0)];
-    if (id === 'unni' && s > 0) ag.push(part(Cyl(0.03, 0.03, 0.3, 6), 0xbcaaa4, 0, -0.48, 0.1, 1, 1, 1, 1.4), part(S(0.06, 6, 5), 0xffffff, 0, -0.5, 0.25));
+    const ap = new THREE.Group(); ap.position.set(s * 0.3, 0.84, 0.05); bob.add(ap);
+    const ag = [part(Cap(0.085, 0.34, 8), P.top, 0, -0.24, 0), part(S(0.105, 10, 8), id === 'ppoppi' ? P.top : P.skin, 0, -0.5, 0), part(S(0.05, 6, 5), id === 'ppoppi' ? P.top : P.skin, 0.06, -0.5, 0.07)];
+    if (id === 'unni' && s > 0) ag.push(part(Cyl(0.03, 0.03, 0.3, 6), 0xbcaaa4, 0, -0.56, 0.1, 1, 1, 1, 1.4), part(S(0.06, 6, 5), 0xffffff, 0, -0.58, 0.25));
     ap.add(new THREE.Mesh(merge(ag), vcToon)); arms.push(ap);
     const lp = new THREE.Group(); lp.position.set(s * 0.12, 0.42, 0); root.add(lp);
     lp.add(new THREE.Mesh(merge([part(Cap(0.085, 0.16, 8), P.bottom, 0, -0.17, 0), part(S(0.11, 10, 8), P.shoe, 0, -0.34, 0.05, 1, 0.65, 1.35)]), vcToon)); legs.push(lp);
@@ -147,6 +147,7 @@ export function makeRacer(def, opt = {}) {
   let cur = -1, mood = 'normal', blinkT = 1 + Math.random() * 3, blinking = 0, t = 0;
   const setF = n => { const f = FACE[n] ?? 0; if (f !== cur) { cur = f; fm.map.offset.x = f / NF; } };
   const A = def.anim;
+  const V = (a, i, spread, fwd) => a.rotation.set(fwd, 0, (i ? 1 : -1) * spread); // spread: 0 = down, π/2 = sideways, ~2.3 = raised V
   const api = { root, def, headG, arms, legs, bob,
     face(name) { mood = name; },
     tick(dt) { t += dt; blinkT -= dt; if (blinkT <= 0) { blinking = 0.13; blinkT = 2 + Math.random() * 3.5; } if (blinking > 0) blinking -= dt;
@@ -163,18 +164,18 @@ export function makeRacer(def, opt = {}) {
       headG.rotation.set(A === 'nod' ? Math.abs(Math.sin(tt * 4)) * 0.2 : A === 'sleepy' ? 0.2 : 0, A === 'lean' ? Math.sin(tt * 0.8) * 0.3 : 0, A === 'sleepy' ? Math.sin(tt * 0.7) * 0.25 : A === 'bouncy' ? Math.sin(tt * 5) * 0.1 : 0);
       if (A === 'bouncy') bob.position.y = Math.abs(Math.sin(tt * 5)) * 0.08;
       arms.forEach((a, i) => a.rotation.set(-1.3, 0, (i ? -1 : 1) * -0.12)); },
-    cheer(tt, k = 1) { const j = Math.abs(Math.sin(tt * 8)); bob.position.y = j * 0.25 * k; bob.rotation.set(0, 0, 0); arms.forEach((a, i) => a.rotation.set(-2.9 + Math.sin(tt * 10 + i) * 0.3 * k, 0, (i ? -1 : 1) * -0.2)); legs.forEach(l => l.rotation.x = 0); headG.rotation.set(0, 0, Math.sin(tt * 4) * 0.12); setF(k > 0.7 ? 'win' : 'happy'); mood = 'happy'; },
-    win(tt) { // character-specific victory pose
+    cheer(tt, k = 1) { const j = Math.abs(Math.sin(tt * 8)); bob.position.y = j * 0.25 * k; bob.rotation.set(0, 0, 0); arms.forEach((a, i) => V(a, i, 2.3 + Math.sin(tt * 10 + i) * 0.3 * k, 0.35)); legs.forEach(l => l.rotation.x = 0); headG.rotation.set(0, 0, Math.sin(tt * 4) * 0.12); setF(k > 0.7 ? 'win' : 'happy'); mood = 'happy'; },
+    win(tt) { // character-specific victory pose; arms always angled out/forward so they read beside the big head
       const W = def.win; legs.forEach(l => l.rotation.x = 0); bob.rotation.set(0, 0, 0); headG.rotation.set(0, 0, 0); bob.position.y = 0; setF('win'); mood = 'win';
-      if (W === 'jump') { const j = Math.abs(Math.sin(tt * 7)); bob.position.y = j * 0.45; arms.forEach((a, i) => a.rotation.set(-3 + j * 0.3, 0, (i ? -1 : 1) * -0.5)); legs[0].rotation.x = -j * 0.6; legs[1].rotation.x = j * 0.3; }
-      else if (W === 'sleepy') { headG.rotation.z = Math.sin(tt * 1.5) * 0.25; arms[0].rotation.set(-0.3, 0, 0.2); arms[1].rotation.set(-2.8, 0, -0.3 + Math.sin(tt * 4) * 0.4); setF(Math.sin(tt * 0.9) > 0.6 ? 'sleepy' : 'happy'); }
-      else if (W === 'peace') { bob.rotation.x = 0.15; arms[0].rotation.set(-0.6, 0, 0.3); arms[1].rotation.set(-2.6, 0, -0.6 + Math.sin(tt * 6) * 0.1); headG.rotation.z = 0.15 + Math.sin(tt * 3) * 0.05; bob.position.y = Math.abs(Math.sin(tt * 4)) * 0.05; }
-      else if (W === 'fist') { const p = Math.sin(tt * 9); arms[0].rotation.set(-0.3, 0, 0.1); arms[1].rotation.set(-2.4 + p * 0.5, 0, -0.1); bob.position.y = Math.max(0, p) * 0.08; }
-      else if (W === 'roar') { bob.rotation.x = -0.15; arms.forEach((a, i) => a.rotation.set(-2.2 + Math.sin(tt * 10) * 0.15, 0, (i ? -1 : 1) * -0.6)); headG.rotation.x = -0.25; bob.position.y = Math.abs(Math.sin(tt * 3)) * 0.1; }
-      else if (W === 'cool') { arms[0].rotation.set(-1.5, 0.6, 0.9); arms[1].rotation.set(-1.5, -0.6, -0.9); headG.rotation.x = Math.abs(Math.sin(tt * 4)) * 0.18; headG.rotation.z = -0.1; }
-      else if (W === 'spin') { bob.rotation.y = tt * 6; arms.forEach((a, i) => a.rotation.set(-1.57, 0, (i ? -1 : 1) * -1.2)); bob.position.y = 0.1; }
-      else if (W === 'bow') { const b = (Math.sin(tt * 2) + 1) / 2; bob.rotation.x = b * 0.5; arms[0].rotation.set(-0.4, 0, 0.4); arms[1].rotation.set(-2.6 + b, 0, -0.4); }
-      else arms.forEach((a, i) => a.rotation.set(-2.9, 0, (i ? -1 : 1) * -0.2)); },
+      if (W === 'jump') { const j = Math.abs(Math.sin(tt * 7)); bob.position.y = j * 0.45; arms.forEach((a, i) => V(a, i, 2.2 + j * 0.35, 0.3)); legs[0].rotation.x = -j * 0.6; legs[1].rotation.x = j * 0.3; }
+      else if (W === 'sleepy') { headG.rotation.z = Math.sin(tt * 1.5) * 0.25; V(arms[0], 0, 0.7, 0.3); V(arms[1], 1, 2.0 + Math.sin(tt * 4) * 0.4, 0.5); setF(Math.sin(tt * 0.9) > 0.6 ? 'sleepy' : 'happy'); }
+      else if (W === 'peace') { bob.rotation.x = 0.1; V(arms[0], 0, 0.8, 0.2); V(arms[1], 1, 2.3 + Math.sin(tt * 6) * 0.1, 0.6); headG.rotation.z = 0.15 + Math.sin(tt * 3) * 0.05; bob.position.y = Math.abs(Math.sin(tt * 4)) * 0.05; }
+      else if (W === 'fist') { const p = Math.sin(tt * 9); V(arms[0], 0, 0.6, 0.2); V(arms[1], 1, 2.2 + p * 0.35, 0.6); bob.position.y = Math.max(0, p) * 0.08; }
+      else if (W === 'roar') { bob.rotation.x = -0.1; arms.forEach((a, i) => V(a, i, 1.4 + Math.sin(tt * 10) * 0.15, 0.9)); headG.rotation.x = -0.2; bob.position.y = Math.abs(Math.sin(tt * 3)) * 0.1; }
+      else if (W === 'cool') { V(arms[0], 0, 1.0, 1.1); V(arms[1], 1, 2.3, 0.3); headG.rotation.x = Math.abs(Math.sin(tt * 4)) * 0.18; headG.rotation.z = -0.1; }
+      else if (W === 'spin') { bob.rotation.y = tt * 6; arms.forEach((a, i) => V(a, i, 1.75, 0)); bob.position.y = 0.1; }
+      else if (W === 'bow') { const b = (Math.sin(tt * 2) + 1) / 2; bob.rotation.x = b * 0.4; V(arms[0], 0, 0.9, 0.3); V(arms[1], 1, 2.0 + b * 0.4, 0.5); }
+      else arms.forEach((a, i) => V(a, i, 2.4, 0.3)); },
     dispose() { bodyG.dispose(); headGeo.dispose(); face.geometry.dispose(); fm.map.dispose(); fm.dispose(); root.traverse(o => { if (o.isMesh && o.geometry !== bodyG && o.geometry !== headGeo && o !== face) o.geometry.dispose(); }); }
   };
   api.tick(0);
@@ -184,7 +185,7 @@ export function makeRacer(def, opt = {}) {
 // ---------- cart decorations (one merged mesh each, in cart-local space; basket floor y≈0.55, rim y≈1.3, handle z≈-0.95) ----------
 export function makeDeco(id) {
   const p = [];
-  if (id === 'mango') { p.push(part(Cyl(0.015, 0.015, 1.0, 6), 0x8d6e63, 0.5, 1.75, -0.8)); p.push(part(Box(0.02, 0.28, 0.42), 0xffa726, 0.5, 2.1, -0.6), part(S(0.1, 8, 6), 0xffeb3b, 0.51, 2.1, -0.6, 0.3, 1, 1), part(Cone(0.05, 0.1, 4), 0x43a047, 0.51, 2.27, -0.5)); }
+  if (id === 'mango') { p.push(part(Cyl(0.015, 0.015, 1.0, 6), 0x8d6e63, 0.55, 1.75, 0.75)); p.push(part(Box(0.02, 0.28, 0.42), 0xffa726, 0.55, 2.1, 0.55), part(S(0.1, 8, 6), 0xffeb3b, 0.56, 2.1, 0.55, 0.3, 1, 1), part(Cone(0.05, 0.1, 4), 0x43a047, 0.56, 2.27, 0.65)); }
   if (id === 'dubu') { p.push(part(Box(0.55, 0.16, 0.4), 0xffffff, 0, 0.66, 0.5), part(Box(0.5, 0.04, 0.35), 0xf8bbd0, 0, 0.76, 0.5), part(Cone(0.08, 0.36, 8), 0xff9800, -0.3, 0.82, -0.2, 1, 1, 1, 0.3, 0, 0.6), part(Cone(0.08, 0.15, 5), 0x43a047, -0.4, 1.02, -0.27, 1, 1, 1, 0.3, 0, 0.6));
     p.push(part(Cap(0.06, 0.25, 6), 0xffffff, -0.25, 1.5, 0.78), part(Cap(0.06, 0.25, 6), 0xffffff, 0.25, 1.5, 0.78), part(Cap(0.035, 0.18, 6), 0xf8bbd0, -0.25, 1.5, 0.82), part(Cap(0.035, 0.18, 6), 0xf8bbd0, 0.25, 1.5, 0.82)); }
   if (id === 'halmi') { const cols = [0xff4081, 0xffeb3b, 0xff7043, 0xe040fb, 0xffffff]; for (let k = 0; k < 10; k++) { const side = k < 5 ? -1 : 1, z = -0.7 + (k % 5) * 0.35; p.push(part(S(0.08, 8, 6), cols[k % 5], side * 0.58, 1.35, z, 1, 0.6, 1), part(S(0.03, 6, 4), 0xfff176, side * 0.58, 1.4, z), part(S(0.05, 6, 4), 0x66bb6a, side * 0.6, 1.3, z + 0.1, 1, 0.4, 1.4)); }

@@ -109,7 +109,7 @@ let podShift = 0; export function setPodiumShift(k) { podShift = k; }
 export function renderPodium(renderer, dt) {
   const P = pod; P.t += dt; const port = innerWidth < innerHeight;
   P.pc.aspect = innerWidth / innerHeight; P.pc.fov = port ? 70 : 45; if (podShift && !port) P.pc.setViewOffset(innerWidth, innerHeight, innerWidth * podShift, 0, innerWidth, innerHeight); else P.pc.clearViewOffset(); P.pc.updateProjectionMatrix();
-  const a = Math.sin(P.t * 0.4) * 0.35; P.pc.position.set(Math.sin(a) * 9, 3.6, Math.cos(a) * 9); P.pc.lookAt(0, port ? 3.2 : 1.4, 0);
+  const a = Math.sin(P.t * 0.4) * 0.35; P.pc.position.set(Math.sin(a) * 8.5, 2.7, Math.cos(a) * 8.5); P.pc.lookAt(0, port ? 3.0 : 1.7, 0);
   for (const { ch, i } of P.chars) { if (i === 0 && ch.win) ch.win(P.t); else if (i === 0) ch.cheer(P.t, 1); else ch.cheer(P.t + i, 0.45); if (ch.tick) ch.tick(dt); if (!(i === 0 && ch.def && ch.def.win === 'spin')) ch.root.rotation.y = Math.sin(P.t * 1.5 + i) * 0.3; }
   if (Math.random() < dt * 1.5) confetti(P.sc, (Math.random() - .5) * 6, 7, 0, 30, 6);
   updateConfetti(dt); renderer.render(P.sc, P.pc);

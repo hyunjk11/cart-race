@@ -24,6 +24,7 @@ function ensurePreview() {
   cart.add(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.55, 1.1), new THREE.MeshLambertMaterial({ color: 0xcfd8dc, transparent: true, opacity: 0.35 })).translateY(0.85));
   const rim = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.05, 1.15), colM); rim.position.y = 1.15; cart.add(rim);
   const hb = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.9, 8), colM); hb.rotation.z = Math.PI / 2; hb.position.set(0, 1.25, -0.7); cart.add(hb);
+  cart.scale.y = 0.62; // low basket so rim/handle sit below the face in the close-up preview
   preview.cart = cart; preview.colM = colM; preview.root.add(cart);
   return preview;
 }
@@ -31,7 +32,7 @@ function showChar(id) {
   const P = ensurePreview(); if (!P) return; id = charOf(id).id; if (P.id === id && P.racer) return; const def = charOf(id);
   if (P.racer) { P.root.remove(P.racer.root); P.racer.dispose(); } if (P.deco) { P.cart.remove(P.deco); P.deco.geometry.dispose(); }
   P.racer = makeRacer(def, { low: false }); P.racer.root.position.set(0, 0, -0.55); P.root.add(P.racer.root);
-  P.deco = makeDeco(id); if (P.deco) { P.deco.scale.setScalar(0.9); P.cart.add(P.deco); }
+  P.deco = makeDeco(id); if (P.deco) { P.deco.scale.set(0.9, 0.9 / 0.62, 0.9); P.cart.add(P.deco); }
   P.colM.color.setHex(def.color); P.id = id;
   const bars = (k, v) => `<div class="csb"><span>${k}</span><i>${'●'.repeat(v)}${'○'.repeat(5 - v)}</i></div>`;
   $('charInfo').innerHTML = `<div class="cni">${def.emoji} <b>${def.name}</b></div><div class="cti">${def.title}</div><p>${def.desc}</p>${bars('속도', statBar(def.st.spd))}${bars('핸들', statBar(def.st.hdl))}${bars('드리프트', statBar(def.st.drf))}`;

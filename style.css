@@ -266,3 +266,6 @@ canvas,#touch,#touch *{touch-action:none}
  #finish.pod .panel{max-height:calc(var(--vh,100dvh) - 20px)}
  #finish.pod.shop .panel{max-height:calc(var(--vh,100dvh) - 20px);width:min(360px,60vw)}
 }
+
+/* patch 7: receipt never hidden behind sticky 다시 시작 */
+#finish .panel{padding-bottom:0}#finish .receipt{margin-bottom:14px}#finish .panel #restart{margin:8px auto 0;box-shadow:0 -10px 14px -4px rgba(40,20,60,.9)}#finish .panel::after{content:'';display:block;height:10px}
