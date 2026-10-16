@@ -5,7 +5,7 @@ const COLORS = ['#ff4f8b', '#43d17a', '#ffc107', '#9c5cff'];
 const MAX = 4;
 const qs = new URLSearchParams(location.search);
 let Peer = null, peer = null, api = null;
-export const NET = { mode: 'solo', you: 0, slots: [], conns: new Map(), hostConn: null, code: '', inRace: false, map: 'mart', send() {}, broadcast() {} };
+export const NET = { mode: 'solo', you: 0, slots: [], conns: new Map(), hostConn: null, code: '', inRace: false, map: 'mart', opts: { gmode: 'race', tlim: true }, send() {}, broadcast() {} };
 
 const ERR = {
   'peer-unavailable': '방을 찾을 수 없습니다. 코드를 확인해 주세요.',
@@ -38,7 +38,7 @@ async function createRoom(tries = 0) {
   peer.on('open', () => {
     NET.mode = 'host'; NET.you = 0; NET.slots = [{ type: 'human', name, ready: true, id: 'host' }, null, null, null];
     NET.broadcast = m => { const s = JSON.stringify(m); for (const c of NET.conns.values()) if (c.open) c.send(s); };
-    NET.map = api.getMap(); showLobby(); pushLobby(); msg('');
+    NET.map = api.getMap(); NET.opts = api.getOpts(); showLobby(); pushLobby(); msg('');
   });
   peer.on('connection', conn => {
     conn.on('open', () => { NET.conns.set(conn.peer, conn); lastSeen.set(conn.peer, performance.now()); });
@@ -67,7 +67,7 @@ function hostRecv(conn, m) {
   else if (m.t === 'st') api.onRemoteState(i, m.s);
   else if (m.t === 'item') api.onRemoteItem(i);
   else if (m.t === 'spawn') api.onSpawn(m.a);
-  else if (m.t === 'crash') api.onRemoteCrash(i);
+  else if (m.t === 'crash') api.onRemoteCrash(i, +m.k || 0);
   else if (m.t === 'hz') api.onRemoteHazard(i, m.id, !!m.sh);
 }
 function hostDrop(peerId) {
@@ -86,14 +86,14 @@ function removeSlot(i) {
 }
 export function pushLobby() {
   if (NET.mode !== 'host') return;
-  for (const [pid, c] of NET.conns) if (c.open) c.send(JSON.stringify({ t: 'lobby', slots: NET.slots, you: slotOf(pid), code: NET.code, map: NET.map }));
+  for (const [pid, c] of NET.conns) if (c.open) c.send(JSON.stringify({ t: 'lobby', slots: NET.slots, you: slotOf(pid), code: NET.code, map: NET.map, opts: NET.opts }));
   renderLobby();
 }
 function canStart() { const n = NET.slots.filter(Boolean).length; return n >= 2 && NET.slots.every(s => !s || s.ready); }
 function startRace() {
   if (!canStart()) return; NET.inRace = true;
   const slots = NET.slots.map(s => s && { type: s.type, name: s.name });
-  for (const [pid, c] of NET.conns) if (c.open) c.send(JSON.stringify({ t: 'start', slots, you: slotOf(pid), map: NET.map }));
+  for (const [pid, c] of NET.conns) if (c.open) c.send(JSON.stringify({ t: 'start', slots, you: slotOf(pid), map: NET.map, opts: NET.opts }));
   hideMP(); api.startRace(slots, 0, 'host');
 }
 export function hostResults(rows) { NET.broadcast({ t: 'results', rows }); api.showResults(rows); setTimeout(backToLobby, 10000); }
@@ -116,11 +116,11 @@ async function joinRoom(code) {
   peer.on('error', e => { clearTimeout(to); msg(ERR[e.type] || ('연결 오류: ' + e.type), true); });
 }
 function guestRecv(m) {
-  if (m.t === 'lobby') { NET.slots = m.slots; NET.you = m.you; if (m.map) { NET.map = m.map; api.onMap(m.map); } renderLobby(); }
+  if (m.t === 'lobby') { NET.slots = m.slots; NET.you = m.you; if (m.map) { NET.map = m.map; api.onMap(m.map); } if (m.opts) { NET.opts = m.opts; api.onOpts(m.opts); } renderLobby(); }
   else if (m.t === 'chat') addChat(m.text);
   else if (m.t === 'reject') { leave(m.msg); }
   else if (m.t === 'kicked') { leave('호스트가 당신을 방에서 내보냈습니다.'); }
-  else if (m.t === 'start') { if (m.map) { NET.map = m.map; api.onMap(m.map); } NET.you = m.you; NET.inRace = true; hideMP(); api.startRace(m.slots, m.you, 'guest'); }
+  else if (m.t === 'start') { if (m.map) { NET.map = m.map; api.onMap(m.map); } if (m.opts) api.onOpts(m.opts); NET.you = m.you; NET.inRace = true; hideMP(); api.startRace(m.slots, m.you, 'guest'); }
   else if (m.t === 'ping') {}
   else if (m.t === 'snap') api.onSnap(m);
   else if (m.t === 'say') api.onSay(m);

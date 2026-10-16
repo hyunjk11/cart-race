@@ -150,7 +150,7 @@ body.touch #pa{font-size:14px;white-space:normal;text-align:center}body.touch #p
 /* cutscene letterbox */
 #cutbar i{position:fixed;left:0;right:0;height:0;background:#000;z-index:4;transition:height .5s;pointer-events:none}#cutbar i:first-child{top:0}#cutbar i:last-child{bottom:0}
 #cutbar.show i{height:11vh}
-body:has(#cutbar.show) #hud,body:has(#cutbar.show) #minimap,body:has(#cutbar.show) #touch{opacity:0;transition:opacity .4s}
+body:has(#cutbar.show) #hud,body:has(#cutbar.show) #minimap,body:has(#cutbar.show) #shopHud,body:has(#cutbar.show) #touch{opacity:0;transition:opacity .4s}
 /* speed lines, flash, comic text */
 #speedlines{position:fixed;inset:-10%;pointer-events:none;opacity:0;transition:opacity .25s;z-index:2;
  background:repeating-conic-gradient(from 0deg at 50% 55%,rgba(255,255,255,.0) 0deg 3deg,rgba(255,255,255,.55) 3.4deg 3.8deg,rgba(255,255,255,0) 4.2deg 9deg);
@@ -169,3 +169,26 @@ body.lowfx #speedlines{display:none}
 #finish.pod h1{margin:0;color:#ffe36e;-webkit-text-stroke:1px #c2185b}
 .tpanel h1{font-weight:normal}
 @media (max-width:700px){#pa{top:auto!important;bottom:260px!important;font-size:13px!important;max-width:86vw!important;padding:6px 12px!important}}
+/* ---- Patch 4: 장보기 모드 ---- */
+#shopHud{position:fixed;left:12px;top:266px;min-width:150px;max-width:190px;padding:8px 10px;border-radius:14px;background:linear-gradient(160deg,rgba(255,255,255,.93),rgba(255,243,224,.93));color:#4e342e;font:15px Jua,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.25);border:3px solid #ffb74d;pointer-events:none;z-index:5}
+#shopHud .sht{font-size:15px;color:#e65100;margin-bottom:3px}
+#shopList div{line-height:1.35;white-space:nowrap}
+#shopList div.ok{color:#2e7d32;text-decoration:line-through;text-decoration-color:rgba(46,125,50,.5)}
+#shopList em{font-style:normal;color:#fff;background:#ff1744;border-radius:6px;padding:0 4px;font-size:12px}
+#shopSum{margin-top:4px;border-top:2px dashed #ffcc80;padding-top:3px}
+#shopSum .warn{color:#d50000;animation:pop .6s infinite alternate}
+#shopSum .go{color:#fff;background:#43a047;border-radius:8px;padding:1px 6px;text-align:center;margin-top:2px}
+@media (max-width:700px){#shopHud{top:196px;left:8px;min-width:0;max-width:150px;font-size:12px;padding:5px 7px;border-width:2px}#shopHud .sht{font-size:12px}#shopList em{font-size:10px}}
+@media (max-height:500px){#shopHud{top:120px}}
+.modec small{font-size:11px}
+.receipt{background:#fffdf7;color:#333;font-family:Jua,monospace;border-radius:6px;padding:10px 12px 6px;margin:4px auto 8px;max-width:330px;text-align:left;box-shadow:0 3px 10px rgba(0,0,0,.25);
+ -webkit-mask:radial-gradient(circle 6px at 50% 100%,#0000 98%,#000) 50% 100%/14px 100% repeat-x;mask:radial-gradient(circle 6px at 50% 100%,#0000 98%,#000) 50% 100%/14px 100% repeat-x}
+.receipt .rh{text-align:center;font-size:17px;border-bottom:2px dashed #bbb;padding-bottom:4px;margin-bottom:4px}.receipt .rh small{font-size:12px;color:#777}
+.receipt table{width:100%;border-collapse:collapse;font-size:13px}.receipt td{padding:1px 2px}.receipt td:nth-child(2),.receipt td:nth-child(3){text-align:right;white-space:nowrap}
+.receipt tr.neg td{color:#c62828}.receipt tr.miss td{color:#aaa}.receipt tr.bon td{color:#2e7d32}.receipt tr.sep td{border-top:2px dashed #bbb;font-weight:bold;padding-top:3px}
+.receipt .rt{text-align:right;font-size:18px;border-top:2px dashed #bbb;margin-top:3px;padding-top:3px}.receipt .rt b{color:#e65100}
+.receipt .rb{text-align:center;letter-spacing:1px;color:#555;font-size:16px;margin-top:2px}
+.rrank{font-size:13px;line-height:1.5;margin-bottom:6px}.rrank .me{color:#ffeb3b}
+#finish.pod.shop{justify-content:flex-end;align-items:center}#finish.pod.shop .panel{max-height:90vh;margin:0 3vw 0 0;width:min(390px,92vw);padding:10px 14px}
+@media (max-aspect-ratio:1/1){#finish.pod.shop{justify-content:center;align-items:flex-end}#finish.pod.shop .panel{max-height:60vh;margin:0 0 2vh;width:94vw}}
+body.podium #hud,body.podium #minimap,body.podium #shopHud,body.podium #touch,body.podium #help,body.podium #bubbles,body.podium #auto,body.podium #msg,body.podium #pa{display:none!important}

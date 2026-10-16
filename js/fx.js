@@ -97,9 +97,10 @@ export function showPodium(entries, textSprite) {
 }
 export function hidePodium() { if (!pod) return; pod.sc.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose?.(); } }); if (conf && conf.parent === pod.sc) pod.sc.remove(conf); pod = null; }
 export const podiumActive = () => !!pod;
+let podShift = 0; export function setPodiumShift(k) { podShift = k; }
 export function renderPodium(renderer, dt) {
   const P = pod; P.t += dt; const port = innerWidth < innerHeight;
-  P.pc.aspect = innerWidth / innerHeight; P.pc.fov = port ? 70 : 45; P.pc.updateProjectionMatrix();
+  P.pc.aspect = innerWidth / innerHeight; P.pc.fov = port ? 70 : 45; if (podShift && !port) P.pc.setViewOffset(innerWidth, innerHeight, innerWidth * podShift, 0, innerWidth, innerHeight); else P.pc.clearViewOffset(); P.pc.updateProjectionMatrix();
   const a = Math.sin(P.t * 0.4) * 0.35; P.pc.position.set(Math.sin(a) * 9, 3.6, Math.cos(a) * 9); P.pc.lookAt(0, port ? 3.2 : 1.4, 0);
   for (const { ch, i } of P.chars) { if (i === 0) ch.cheer(P.t, 1); else ch.cheer(P.t + i, 0.45); ch.root.rotation.y = Math.sin(P.t * 1.5 + i) * 0.3; }
   if (Math.random() < dt * 1.5) confetti(P.sc, (Math.random() - .5) * 6, 7, 0, 30, 6);

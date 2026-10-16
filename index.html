@@ -11,7 +11,7 @@
  "cannon-es":"https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"}}</script>
 </head><body>
 <div id="hud">
- <div id="hudL"><div>⏱ 시간 <b id="time">0:00.00</b></div><div>🏁 랩 <b id="lap">1/3</b></div><div>🏆 순위 <b id="rank">1/4</b></div><div>🏅 최고 랩 <b id="best">-</b></div></div>
+ <div id="hudL"><div>⏱ 시간 <b id="time">0:00.00</b></div><div><span id="lapLbl">🏁 랩</span> <b id="lap">1/3</b></div><div>🏆 순위 <b id="rank">1/4</b></div><div>🏅 최고 랩 <b id="best">-</b></div></div>
  <div id="hudR"><div>💥 혼돈 지수 <b id="chaos">0</b></div><div>🧍 넘어뜨린 손님 <b id="knocked">0</b></div><div>🥫 떨어뜨린 상품 <b id="spilled">0</b></div></div>
  <div id="hudB"><div id="speed">0 km/h</div><div id="driftTxt"></div><div id="n2o"></div><div id="boostBar"><div id="boostFill"></div></div><div class="small">드리프트 게이지</div><div id="itemSlot"></div><div id="riders"></div></div>
 </div>
@@ -25,10 +25,12 @@
  <div class="tr"><button data-key="Item" class="itemb">아이템</button><button data-key="Drift" class="drift">드리프트</button><button data-key="Space" class="boost">부스트</button></div>
 </div>
 <button id="auto"></button>
+<div id="shopHud" class="hidden"><div class="sht">🧾 장보기 목록</div><div id="shopList"></div><div id="shopSum"></div></div>
 <canvas id="minimap" width="150" height="100"></canvas>
 <div id="bubbles"></div>
 <div id="title"><div class="panel tpanel">
  <div class="logo">🛒💨</div><h1>마트 카트 레이싱</h1><p class="sub">드리프트로 N2O를 모으고, 아이템으로 라이벌을 막고, 마트를 혼돈에 빠뜨려라!</p>
+ <div class="mapsel"><div class="mlabel">🎮 모드</div><div id="modeRow" class="maprow"></div><div id="modeDesc" class="note"></div></div>
  <div class="mapsel"><div class="mlabel">🗺️ 맵 선택</div><div id="mapRow" class="maprow"></div><div id="mapDesc" class="note"></div></div>
  <div class="tbtns"><button id="startBtn">🏁 혼자 하기</button><button id="mpBtn">🌐 멀티플레이</button></div>
  <div class="qrow">화질 <select id="quality"><option value="auto">자동</option><option value="low">낮음 (저사양 · 효과 줄임)</option><option value="high">높음</option></select></div>
@@ -45,7 +47,7 @@
   <button id="mpBack" class="sec">← 뒤로</button></div>
  <div id="mpLobby" class="hidden"><h2>대기실 · 방 코드 <span id="roomCode"></span></h2>
   <div class="joinrow"><input id="invite" readonly><button id="copyBtn">복사</button></div>
-  <div id="slots"></div><div id="lobbyMaps" class="maprow small"></div><div id="lobbyMapNote" class="note"></div><div id="lobbyHint" class="note"></div><div id="lobbyMsg"></div>
+  <div id="slots"></div><div id="lobbyModes" class="maprow small"></div><div id="lobbyModeNote" class="note"></div><div id="lobbyMaps" class="maprow small"></div><div id="lobbyMapNote" class="note"></div><div id="lobbyHint" class="note"></div><div id="lobbyMsg"></div>
   <div class="lbtns"><button id="addBot">🤖 봇 추가</button><button id="readyBtn">준비</button><button id="startRace">🏁 경주 시작</button><button id="leaveBtn" class="sec">나가기</button></div>
   <div id="chatLog"></div><input id="chatIn" maxlength="80" placeholder="채팅 입력 후 Enter">
  </div></div></div>
