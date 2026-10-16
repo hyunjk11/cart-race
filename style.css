@@ -138,7 +138,7 @@ html,body,button,input,select{font-family:"Jua","Malgun Gothic","Apple SD Gothic
 /* PA banner */
 #pa{position:fixed;left:50%;bottom:-90px;transform:translateX(-50%);background:linear-gradient(90deg,#1565c0,#26c6da);border:3px solid #fff;color:#fff;padding:10px 22px;border-radius:20px;font-size:20px;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis;transition:bottom .45s cubic-bezier(.3,1.5,.5,1);z-index:6;box-shadow:0 6px 16px rgba(0,0,0,.35);pointer-events:none}
 #pa.show{bottom:14px}#pa .ding{background:#fff;color:#1565c0;border-radius:10px;padding:1px 8px;margin-right:6px}
-body.touch #pa{font-size:14px;white-space:normal;text-align:center}body.touch #pa.show{bottom:auto;top:62px}
+
 /* intro banner */
 #intro{position:fixed;left:0;right:0;top:12%;text-align:center;pointer-events:none;opacity:0;transform:translateY(-20px);transition:all .5s;z-index:5}
 #intro.show{opacity:1;transform:none}
@@ -168,7 +168,6 @@ body.lowfx #speedlines{display:none}
 #finish.pod .panel{background:linear-gradient(160deg,rgba(40,20,60,.82),rgba(90,30,90,.82));border:3px solid #fff;margin-bottom:3vh;font-size:16px;line-height:1.5;padding:12px 26px;max-height:46vh;overflow:auto}
 #finish.pod h1{margin:0;color:#ffe36e;-webkit-text-stroke:1px #c2185b}
 .tpanel h1{font-weight:normal}
-@media (max-width:700px){#pa{top:auto!important;bottom:260px!important;font-size:13px!important;max-width:86vw!important;padding:6px 12px!important}}
 /* ---- Patch 4: 장보기 모드 ---- */
 #shopHud{position:fixed;left:12px;top:266px;min-width:150px;max-width:190px;padding:8px 10px;border-radius:14px;background:linear-gradient(160deg,rgba(255,255,255,.93),rgba(255,243,224,.93));color:#4e342e;font:15px Jua,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.25);border:3px solid #ffb74d;pointer-events:none;z-index:5}
 #shopHud .sht{font-size:15px;color:#e65100;margin-bottom:3px}
@@ -192,3 +191,32 @@ body.lowfx #speedlines{display:none}
 #finish.pod.shop{justify-content:flex-end;align-items:center}#finish.pod.shop .panel{max-height:90vh;margin:0 3vw 0 0;width:min(390px,92vw);padding:10px 14px}
 @media (max-aspect-ratio:1/1){#finish.pod.shop{justify-content:center;align-items:flex-end}#finish.pod.shop .panel{max-height:60vh;margin:0 0 2vh;width:94vw}}
 body.podium #hud,body.podium #minimap,body.podium #shopHud,body.podium #touch,body.podium #help,body.podium #bubbles,body.podium #auto,body.podium #msg,body.podium #pa{display:none!important}
+/* ---- Patch 5: characters, select, spectator ---- */
+.charbtn{display:block;margin:6px auto 10px;background:linear-gradient(135deg,#ff8fab,#ffb74d);border:3px solid #fff;border-radius:16px;padding:8px 18px;font:18px Jua,sans-serif;color:#fff;box-shadow:0 3px 8px #0003;cursor:pointer}
+.charbtn.small{font-size:15px;padding:5px 14px;margin:4px auto}
+#charSel{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(40,10,40,.55)}
+#charSel.hidden{display:none}
+.cspanel{width:min(760px,96vw);max-height:96vh;overflow:auto;background:linear-gradient(160deg,#fff7fb,#fff1e0)!important;color:#5d3a4a!important;border:4px solid #ffb3c8!important;padding:12px 16px!important}
+.cspanel h2{margin:0 0 6px;color:#e91e63;font-family:Jua,sans-serif}
+.csmain{display:flex;gap:14px;align-items:stretch;justify-content:center}
+#charPrev{width:260px;height:280px;border-radius:16px;background:#fff3f8;box-shadow:inset 0 0 0 3px #ffd1e0}
+#charInfo{flex:1;min-width:200px;text-align:left;font-family:Jua,sans-serif;font-size:15px}
+#charInfo .cni{font-size:30px;color:#d81b60}#charInfo .cti{color:#8d6e63;font-size:16px}#charInfo p{margin:6px 0 10px;line-height:1.4}
+.csb{display:flex;gap:8px;align-items:center;font-size:15px}.csb span{width:62px}.csb i{font-style:normal;color:#ff7043;letter-spacing:2px;font-size:17px}
+.charrow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}
+.chc{display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 4px;border-radius:14px;border:3px solid var(--cc);background:#fff;color:#5d3a4a;font-family:Jua,sans-serif;cursor:pointer;margin:0}
+.chc .ci{font-size:28px}.chc b{font-size:16px}.chc small{font-size:11px;color:#9e7b88}
+.chc.sel{background:var(--cc);color:#fff;transform:scale(1.05);box-shadow:0 4px 10px #0003}.chc.sel small{color:#fff}
+#charSel.lineup .csmain #charInfo{display:none}#charSel.lineup #charPrev{width:100%;height:300px}
+#lineupNames{display:none;justify-content:space-around;font-family:Jua,sans-serif;font-size:14px;color:#d81b60;margin-top:4px}#charSel.lineup #lineupNames{display:flex}
+@media (max-width:640px){.csmain{flex-direction:column;align-items:center}#charPrev{width:200px;height:210px}.charrow{grid-template-columns:repeat(4,1fr);gap:5px}.chc .ci{font-size:22px}.chc small{display:none}#charSel.lineup #charPrev{height:200px}#lineupNames{font-size:10px}}
+#slots .sch{font-size:22px}#slots .scn{opacity:.75;font-size:12px}
+#spec{position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:20;display:flex;gap:8px;align-items:center;background:linear-gradient(135deg,rgba(103,58,183,.9),rgba(233,30,99,.9));color:#fff;font:16px Jua,sans-serif;padding:6px 10px 6px 14px;border-radius:20px;border:3px solid #fff;box-shadow:0 3px 10px #0004}
+#spec.hidden{display:none}#spec button{margin:0;padding:4px 12px;font:14px Jua,sans-serif;border-radius:14px;border:2px solid #fff;background:#fff3;color:#fff;cursor:pointer}#spec button.on{background:#ffeb3b;color:#6a1b9a}
+@media (max-width:640px){#spec{top:auto;bottom:200px;font-size:12px;flex-wrap:wrap;justify-content:center;width:90vw}#spec button{font-size:12px}}
+body.podium #spec{display:none!important}
+/* PA banner: hidden = invisible regardless of position rules; mobile = small, near top */
+#pa{opacity:0;visibility:hidden;transition:bottom .45s cubic-bezier(.3,1.5,.5,1),opacity .3s,visibility 0s .3s}
+#pa.show{opacity:1;visibility:visible;transition:bottom .45s cubic-bezier(.3,1.5,.5,1),opacity .2s}
+@media (max-width:700px),(pointer:coarse){#pa{top:-60px;bottom:auto;font-size:12px;padding:4px 10px;border-width:2px;white-space:normal;text-align:center;max-width:72vw;transition:top .35s,opacity .3s,visibility 0s .3s}
+ #pa.show{top:calc(env(safe-area-inset-top,0px) + 8px);bottom:auto}#pa .ding{padding:0 5px;font-size:11px}}

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { makeRacer, makeDeco, charOf, vcToon as vcToonC, getFaceTex as racerFaceTex, facePatch, FACE as RFACE } from './chars.js';
 const lm = c => new THREE.MeshLambertMaterial({ color: c });
 const skin = lm(0xf1c27d);
 
@@ -30,24 +31,29 @@ function wireBasket(w, h, d, step) {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); return g;
 }
 
-export function makeCart(color, shirtCol) {
+export function makeCart(color, charId, opt = {}) {
   const root = new THREE.Group();
   const cart = new THREE.Group(); cart.position.z = 0.5; root.add(cart);
   const basket = new THREE.LineSegments(wireBasket(1.1, 0.75, 1.6, 0.18), new THREE.LineBasicMaterial({ color: 0xcfd8dc }));
   basket.position.y = 0.55; cart.add(basket);
-  const rim = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.06, 1.66), lm(color)); rim.position.y = 1.3; cart.add(rim);
-  const metal = lm(0x9e9e9e);
+  const colM = new THREE.MeshToonMaterial({ color }), metal = lm(0x9e9e9e);
+  const rim = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.06, 1.66), colM); rim.position.y = 1.3; cart.add(rim);
   const base = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.05, 1.5), metal); base.position.y = 0.3; cart.add(base);
-  for (const [x, z] of [[-0.4, -0.7], [0.4, -0.7], [-0.4, 0.7], [0.4, 0.7]]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.05), metal); p.position.set(x, 0.38, z); cart.add(p); }
+  { const pg = new THREE.BoxGeometry(0.05, 0.3, 0.05), parts = []; for (const [x, z] of [[-0.4, -0.7], [0.4, -0.7], [-0.4, 0.7], [0.4, 0.7]]) parts.push(pg.clone().translate(x, 0.38, z)); for (const s of [-1, 1]) parts.push(new THREE.BoxGeometry(0.04, 0.3, 0.04).translate(s * 0.55, 1.3, -0.88)); cart.add(new THREE.Mesh(mergeGeometries(parts), metal)); }
   const wheels = [];
-  const wg = new THREE.CylinderGeometry(0.12, 0.12, 0.08, 12); wg.rotateZ(Math.PI / 2);
-  for (const [x, z] of [[-0.4, -0.7], [0.4, -0.7], [-0.4, 0.7], [0.4, 0.7]]) { const w = new THREE.Mesh(wg, lm(0x222222)); w.position.set(x, 0.12, z); cart.add(w); wheels.push(w); }
-  // handle
-  const hb = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.2, 8), lm(color)); hb.rotation.z = Math.PI / 2; hb.position.set(0, 1.4, -0.95); cart.add(hb);
-  for (const s of [-1, 1]) { const a = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.3, 0.04), metal); a.position.set(s * 0.55, 1.3, -0.88); cart.add(a); }
-  const person = makeChibi(shirtCol); person.root.position.z = -0.95; root.add(person.root);
-  let roll = 0, ph = 0;
-  return { root, update(v, dt) { roll += v * dt / 0.12; wheels.forEach(w => w.rotation.x = roll); ph += Math.abs(v) * dt * 2.2; person.walk(Math.abs(v) > 0.3 ? ph : 0, Math.min(1, Math.abs(v) / 15)); } };
+  const wg = new THREE.CylinderGeometry(0.12, 0.12, 0.08, 12); wg.rotateZ(Math.PI / 2); const wm = lm(0x222222);
+  for (const [x, z] of [[-0.4, -0.7], [0.4, -0.7], [-0.4, 0.7], [0.4, 0.7]]) { const w = new THREE.Mesh(wg, wm); w.position.set(x, 0.12, z); cart.add(w); wheels.push(w); }
+  const hb = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.2, 8), colM); hb.rotation.z = Math.PI / 2; hb.position.set(0, 1.4, -0.95); cart.add(hb);
+  let person = null, deco = null, roll = 0, ph = 0, t = 0;
+  const api = { root, pose: null, get person() { return person; }, charId: null,
+    setChar(id) { id = charOf(id).id; if (id === api.charId && person) return; api.charId = id; const def = charOf(id);
+      if (person) { root.remove(person.root); person.dispose(); } if (deco) { cart.remove(deco); deco.geometry.dispose(); deco = null; }
+      person = makeRacer(def, opt); person.root.position.z = -0.95; root.add(person.root); deco = makeDeco(id); if (deco) cart.add(deco); colM.color.setHex(def.color); },
+    face(n) { if (person) person.face(n); },
+    update(v, dt) { t += dt; roll += v * dt / 0.12; wheels.forEach(w => w.rotation.x = roll); ph += Math.abs(v) * dt * 2.2; if (!person) return;
+      if (api.pose === 'win') person.win(t); else if (Math.abs(v) > 0.3) person.walk(ph, Math.min(1, Math.abs(v) / 15)); else person.idle(t); person.tick(dt); } };
+  api.setChar(charId);
+  return api;
 }
 
 // Chibi pusher: big round head, sparkly eyes, blush, hat, tiny body. pal = {skin, shirt, hat, hair, pants}
@@ -104,7 +110,7 @@ export function makeChibi(pal) {
 }
 
 // ---------- customer / cashier chibis (few draw calls: vertex-colored merged parts + face atlas) ----------
-const vcMat = new THREE.MeshToonMaterial({ vertexColors: true });
+const vcMat = vcToonC;
 const _c = new THREE.Color();
 function part(g, col, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1, rx = 0, ry = 0, rz = 0) {
   g = g.index ? g : g; g.scale(sx, sy, sz); g.rotateX(rx); g.rotateY(ry); g.rotateZ(rz); g.translate(x, y, z);
@@ -114,7 +120,7 @@ function part(g, col, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1, rx = 0, ry = 
 }
 const merge = parts => { const m = mergeGeometries(parts.map(p => p.index ? p.toNonIndexed() : p), false); parts.forEach(p => p.dispose()); return m; };
 // expression atlas: 0 normal, 1 happy, 2 dizzy, 3 angry, 4 shock
-export const FACE = { normal: 0, happy: 1, dizzy: 2, angry: 3, shock: 4 };
+export const FACE = RFACE;
 let faceTex = null;
 function getFaceTex() {
   if (faceTex) return faceTex;
@@ -133,6 +139,7 @@ function getFaceTex() {
   }
   faceTex = new THREE.CanvasTexture(c); faceTex.colorSpace = THREE.SRGBColorSpace; faceTex.repeat.set(0.2, 1); return faceTex;
 }
+let _cfg = null; const custFaceG = () => _cfg || (_cfg = facePatch(0.365));
 const faceG = new THREE.PlaneGeometry(0.5, 0.5), starMat = new THREE.MeshBasicMaterial({ color: 0xffeb3b });
 const starG = (() => { const parts = []; for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2; parts.push(part(new THREE.OctahedronGeometry(0.07, 0), 0xffffff, Math.cos(a) * 0.32, 0, Math.sin(a) * 0.32, 1, 1, 0.5)); } return merge(parts); })();
 const HAIRC = [0x3e2723, 0x5d4037, 0x212121, 0x8d6e63, 0xd7a35c, 0xb71c1c], SHIRTC = [0xef5350, 0x42a5f5, 0x66bb6a, 0xffa726, 0xab47bc, 0x26c6da, 0xf48fb1, 0xfff176, 0x8d6e63, 0x7986cb];
@@ -152,7 +159,7 @@ export function makeCustomer(opt = {}) {
   const body = new THREE.Mesh(merge(bp), vcMat); bob.add(body);
   // head + hair
   const headG = new THREE.Group(); headG.position.y = 1.3; bob.add(headG);
-  const hp = [part(new THREE.SphereGeometry(0.36, 18, 14), skinC, 0, 0, 0, 1.05, 0.95, 1)];
+  const hp = [part(new THREE.SphereGeometry(0.36, 20, 16), skinC, 0, 0, 0, 1.05, 0.95, 1)];
   const hemi = (c, y = 0.03, sc = 1) => part(new THREE.SphereGeometry(0.38 * sc, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), c, 0, y, -0.02, 1.05, 1, 1, -0.3);
   if (style === 'short') hp.push(hemi(hairC));
   if (style === 'bun') hp.push(hemi(hairC), part(new THREE.SphereGeometry(0.15, 10, 8), hairC, 0, 0.36, -0.12));
@@ -162,8 +169,8 @@ export function makeCustomer(opt = {}) {
   if (style === 'cap' || opt.uniform) { const cc = opt.uniform || pick([0xe53935, 0x1e88e5, 0xfdd835, 0x43a047]); hp.push(hemi(hairC, 0, 0.97), part(new THREE.SphereGeometry(0.385, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.38), cc, 0, 0.06, 0), part(new THREE.CylinderGeometry(0.2, 0.2, 0.03, 12), cc, 0, 0.16, 0.34, 1.2, 1, 1, 0.25)); }
   if (age === 'grand') hp.push(part(new THREE.TorusGeometry(0.075, 0.012, 6, 14), 0x5d4037, -0.13, 0.0, 0.36), part(new THREE.TorusGeometry(0.075, 0.012, 6, 14), 0x5d4037, 0.13, 0.0, 0.36));
   const head = new THREE.Mesh(merge(hp), vcMat); headG.add(head);
-  const fm = new THREE.MeshBasicMaterial({ map: getFaceTex().clone(), transparent: true, depthWrite: false }); fm.map.needsUpdate = true;
-  const face = new THREE.Mesh(faceG, fm); face.position.set(0, -0.02, 0.352); headG.add(face);
+  const fm = new THREE.MeshBasicMaterial({ map: racerFaceTex().clone(), transparent: true, depthWrite: false }); fm.map.needsUpdate = true;
+  const face = new THREE.Mesh(custFaceG(), fm); face.position.y = -0.03; headG.add(face);
   const stars = new THREE.Mesh(starG, starMat); stars.position.y = 0.5; stars.visible = false; headG.add(stars);
   // arms (left may carry a basket) and legs
   const arms = [], legs = [];
@@ -177,9 +184,11 @@ export function makeCustomer(opt = {}) {
   }
   const sc = age === 'kid' ? 0.72 : age === 'grand' ? 0.92 : 1; root.scale.setScalar(sc);
   if (age === 'grand') { bob.rotation.x = 0.12; headG.position.z = 0.06; }
-  let curFace = -1;
+  let curFace = -1; const blinkPh = Math.random() * 4;
+  // bigger, cuter head (chibi proportions)
+  headG.scale.setScalar(1.18); headG.position.y = 1.36;
   const api = { root, age, scale: sc, basket,
-    face(name) { const f = FACE[name] ?? 0; if (f !== curFace) { curFace = f; fm.map.offset.x = f * 0.2; } },
+    face(name) { let f = FACE[name] ?? 0; if (f === 0 && ((performance.now() / 1000 + blinkPh) % 4) < 0.13) f = 1; if (f !== curFace) { curFace = f; fm.map.offset.x = f / 9; } },
     stars(on, t) { stars.visible = on; if (on) stars.rotation.y = t * 5; },
     walk(ph, k = 1) { legs[0].rotation.x = Math.sin(ph) * 0.6; legs[1].rotation.x = -Math.sin(ph) * 0.6; arms[0].rotation.set(basket ? -0.15 : -Math.sin(ph) * 0.5, 0, 0); arms[1].rotation.set(Math.sin(ph) * 0.5, 0, 0);
       bob.position.y = Math.abs(Math.sin(ph)) * 0.04 * k; headG.rotation.z = Math.sin(ph) * 0.05; },

@@ -3,10 +3,12 @@ import * as CANNON from 'cannon-es';
 import * as TR from './track.js';
 import { LAPS, MAPS, MAP_IDS, setMap, buildWorld, textSprite, path, strips, hAt, zoneAt, inRect, atLane, tangentAt } from './track.js';
 import { createFun, ITEMS } from './fun.js';
-import { initNet, NET, hostResults, pushLobby } from './net.js';
+import { initNet, NET, hostResults, pushLobby, setMyChar } from './net.js';
 import { makeCart, makeCustomer } from './models.js';
 import * as FX from './fx.js';
 import { createShop, T_LIMIT, won } from './shop.js';
+import { ROSTER, charOf } from './chars.js';
+import { openCharSel, tickCharPrev, setLineup, renderCharCards } from './charsel.js';
 import { initAudio, suspendAudio, sound, setEngine, setDrift, setMuted, isMuted, onMuteChange } from './audio.js';
 
 const $ = id => document.getElementById(id);
@@ -66,28 +68,29 @@ document.querySelectorAll('#touch [data-key]').forEach(b => {
 
 // ---------- stats ----------
 const stats = { knocked: 0, spilled: 0 };
-let msgT = 0; function flash(t) { $('msg').textContent = t; msgT = 1.5; }
+let msgT = 0; function flash(t) { $('msg').textContent = t; msgT = 1.5; msgUntil = Date.now() + 4000; }
 
 // ---------- carts ----------
 const CART_R = 1.3;
 const carts = [];
-function addCart(color, name, lane, row, ai, pal) {
-  const g = makeCart(color, pal); scene.add(g.root);
+function addCart(color, name, lane, row, ai, charId) {
+  const g = makeCart(color, charId, { low: LOWFX }); scene.add(g.root);
   const body = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, shape: new CANNON.Box(new CANNON.Vec3(0.7, 0.7, 1.6)) });
   world.addBody(body);
-  const c = { g, body, name, baseName: name, ai, color, pal, x: 0, z: 0, h: Math.PI / 2, v: 0, idx: 0, lap: 0, finished: false, time: 0,
+  const c = { g, body, name, baseName: name, ai, color, char: charId, st: charOf(charId).st, lines: charOf(charId).lines, x: 0, z: 0, h: Math.PI / 2, v: 0, idx: 0, lap: 0, finished: false, time: 0,
     maxV: ai ? 17 + Math.random() * 2.5 : 20, offset: lane * 0.6, vd: Math.PI / 2, n2o: 0, gauge: 0, combo: 0, item: null, stuck: 0, prog: 0 };
-  g.root.rotation.order = 'YXZ'; carts.push(c); return c;
+  g.root.rotation.order = 'YXZ'; carts.push(c); c.color = charOf(charId).color; return c;
 }
+function setCartChar(c, id) { const d = charOf(id); c.char = d.id; c.g.setChar(d.id); c.color = d.color; c.st = d.st; c.lines = d.lines; }
+let MYCHAR = charOf(localStorage.getItem('cartChar') || 'mango').id;
+const cline = (c, k, fb) => { const a = (c.lines && c.lines[k]) || fb; return a[(Math.random() * a.length) | 0]; };
 function nearestIdx(x, z, from, span) {
   let bi = from, bd = 1e9;
   for (let k = 0; k < span; k++) { const i = (from + k + N) % N; const d = (path[i].x - x) ** 2 + (path[i].y - z) ** 2; if (d < bd) { bd = d; bi = i; } }
   return bi;
 }
-let player = addCart(0xff4f8b, '나', -2.5, 0, false, { shirt: 0xffd54f, hat: 0xff4f8b, hair: 0x6d3b1f, pants: 0x4fc3f7 });
-addCart(0x43d17a, '초록 카트', 2.5, 0, true, { shirt: 0xb2ff59, hat: 0x2ecc71, hair: 0x3b2b20, pants: 0x8d6e63 });
-addCart(0xffc107, '노랑 카트', -2.5, 1, true, { shirt: 0xff8a65, hat: 0xffc107, hair: 0xf4d03f, pants: 0x7e57c2 });
-addCart(0x9c5cff, '보라 카트', 2.5, 1, true, { shirt: 0x80deea, hat: 0x9c5cff, hair: 0x222244, pants: 0xf06292 });
+let player = addCart(0xff4f8b, '나', -2.5, 0, false, MYCHAR);
+{ const others = ROSTER.filter(r => r.id !== MYCHAR); [[2.5, 0], [-2.5, 1], [2.5, 1]].forEach(([l, r], k) => addCart(0x888888, others[k].name, l, r, true, others[k].id)); }
 
 // ---------- products (physics pool) ----------
 const MAXP = 110, products = [];
@@ -210,7 +213,7 @@ function shelfCollide(c, dt) {
       }
       else if (impact > 7 && (c.lastHit || 0) <= 0) {
         const n = Math.min(10, Math.floor(impact / 2.2)); stats.spilled += n; c.lastHit = 0.4; if (!c.ai) { sound.clatter(n); sound.bump(0.8); }
-        if (!c.ai) { flash('선반 충돌! 상품이 쏟아졌다 🥫'); shake = Math.min(1, impact / 15); say(c, pick(['으앗!', '내 카트!', '이크!']), 1.4); } else if (Math.random() < 0.5) say(c, pick(['비켜비켜!', '이런!', '으악 선반!']), 1.4);
+        if (!c.ai) { flash('선반 충돌! 상품이 쏟아졌다 🥫'); shake = Math.min(1, impact / 15); say(c, cline(c, 'crash', ['으앗!']), 1.4); } else if (Math.random() < 0.5) say(c, cline(c, 'crash', ['이런!']), 1.4);
         if (c.riders && c.riders.length) hopOut(c, 'crash');
         if (MODE === 'guest' && c === player && (nRiders(c) || GMODE === 'shop')) NET.send({ t: 'crash', k: Math.round(impact) }); if (SHOPON() && MODE !== 'guest' && state === 'race') shop.crash(c, impact);
         removeShelfItems(px - nx * 0.6, pz - nz * 0.6, n); puff(px + nx * 0.6, 1, pz + nz * 0.6, 0xffe0a0, 6);
@@ -268,20 +271,20 @@ function updateCart(c, dt) {
     c.wantDrift = !goal && Math.abs(da) > 0.32 && c.v > 11 && !(c.reverse > 0);
     if (c.n2o > 0 && Math.abs(da) < 0.1 && (c.boostT || 0) <= 0 && Math.random() < 0.02) c.useN2O = true;
   }
-  if (!c.ai) { if (boosting && !c.wasBoost) { sound.whoosh(); if (Math.random() < 0.5) say(c, pick(['간다~!', '부스트!', '슝~!']), 1.2); } c.wasBoost = boosting; setEngine(c.v, boosting); setDrift(c.drifting ? Math.abs(c.slip || 0) * 2 : (c.slipT > 0 ? 0.3 : 0)); }
+  if (!c.ai) { if (boosting && !c.wasBoost) { sound.whoosh(); if (Math.random() < 0.5) say(c, cline(c, 'boost', ['간다~!']), 1.2); } c.wasBoost = boosting; setEngine(c.v, boosting); setDrift(c.drifting ? Math.abs(c.slip || 0) * 2 : (c.slipT > 0 ? 0.3 : 0)); }
   if (c.useN2O) { c.useN2O = false; if (state === 'race' && !c.finished) {
-    if (c.n2o > 0) { c.n2o--; c.boostT = 1.7; c.v += 2; }
+    if (c.n2o > 0) { c.n2o--; c.boostT = 1.7; c.v += 2; if (c.ai && Math.random() < 0.3) say(c, cline(c, 'boost', ['간다~!']), 1.2); }
     else if (!c.ai) { c.emptyTries = (c.emptyTries || 0) + 1; sound.empty(); flash('N2O 없음! 드리프트로 충전하세요'); const n = $('n2o'); n.classList.remove('empty'); void n.offsetWidth; n.classList.add('empty'); } } }
   if (c.boostT > 0) { c.boostT -= dt; boosting = true; }
   if (c.instT > 0) { c.instT -= dt; boosting = true; }
   if (c.spin > 0) { c.spin -= dt; steer = 0; thr = 0; c.h += dt * 11; c.wantDrift = false; }
-  if (c.wantDrift && !c.drifting && Math.abs(c.v) > 8 && steer !== 0) { c.drifting = true; c.driftDir = Math.sign(steer); c.driftT = 0; c.v *= 0.97; }
+  if (c.wantDrift && !c.drifting && Math.abs(c.v) > 8 && steer !== 0) { c.drifting = true; c.driftDir = Math.sign(steer); c.driftT = 0; if (state === 'race' && Math.random() < (c.ai ? 0.06 : 0.2)) say(c, cline(c, 'drift', ['슝~']), 1.2); c.v *= 0.97; }
   if (c.drifting) { c.driftT += dt; if (!c.wantDrift || c.v < 5) { c.drifting = false; c.instWin = 0.5; c.lastDir = c.driftDir; if (c.driftT > 0.5) { c.combo++; c.comboT = 3; } } }
   if (!c.drifting && c.instWin > 0) { c.instWin -= dt; const counter = steer === -c.lastDir, upHit = !c.ai && c.upEdge, aiHit = c.ai && Math.random() < 0.04;
     if ((counter || upHit || aiHit) && c.driftT > 0.3) { c.instWin = 0; c.instT = 0.7; c.v += 3.5; c.instCount = (c.instCount || 0) + 1; if (!c.ai) { flash('⚡ 순간 부스트!'); sound.whoosh(); } } }
   c.comboT = (c.comboT || 0) - dt; if (c.comboT <= 0) c.combo = 0;
   c.steerIn = steer;
-  let maxV = c.maxV * (boosting ? 1.45 : 1) * (c.push && autoAccel ? 1.1 : 1) * (c.magnetT > 0 ? 1.15 : 1) * (1 - 0.12 * nRiders(c));
+  let maxV = c.maxV * (c.st ? c.st.spd : 1) * (boosting ? 1.45 : 1) * (c.push && autoAccel ? 1.1 : 1) * (c.magnetT > 0 ? 1.15 : 1) * (1 - 0.12 * nRiders(c));
   const zn = zoneAt(c.x, c.z); c.bumpT = (c.bumpT || 0) - dt;
   if (zn) {
     if (zn.t === 'ice') c.slipT = Math.max(c.slipT || 0, 0.3);
@@ -297,17 +300,17 @@ function updateCart(c, dt) {
   if (thr === 0 && Math.abs(c.v) < 0.3) c.v = 0;
   const sf = Math.min(1, Math.abs(c.v) / 5) * Math.sign(c.v || 1);
   if (c.drifting) { c.h += (c.driftDir * 0.8 + steer * 0.6) * 2.5 * dt * sf; c.v -= c.v * 0.18 * dt; }
-  else c.h += steer * dt * 2.4 * sf;
+  else c.h += steer * dt * 2.4 * sf * (c.st ? c.st.hdl : 1);
   const grip = c.drifting ? 1.6 : c.slipT > 0 ? 0.9 : c.spin > 0 ? 0.5 : 9;
   let slip = ang(c.h - c.vd); c.vd += slip * Math.min(1, grip * dt);
   slip = ang(c.h - c.vd); if (Math.abs(slip) > 1.0) { c.vd = c.h - Math.sign(slip) * 1.0; slip = Math.sign(slip) * 1.0; }
   c.slip = slip; if (c.drifting && Math.abs(slip) > 0.75 && c.riders && c.riders.length && c.driftT > 0.8) hopOut(c, 'drift');
-  if (c.drifting && state === 'race') { c.gauge += Math.abs(slip) * Math.abs(c.v) * dt * 0.2; if (c.gauge >= 1) { c.gauge = 0; if (c.n2o < 2) { c.n2o++; if (!c.ai) { flash('🔥 N2O 충전!'); sound.charge(); } } } }
+  if (c.drifting && state === 'race') { c.gauge += Math.abs(slip) * Math.abs(c.v) * dt * 0.2 * (c.st ? c.st.drf : 1); if (c.gauge >= 1) { c.gauge = 0; if (c.n2o < 2) { c.n2o++; if (!c.ai) { flash('🔥 N2O 충전!'); sound.charge(); } } } }
   c.x += Math.sin(c.vd) * c.v * dt; c.z += Math.cos(c.vd) * c.v * dt;
   shelfCollide(c, dt);
   // progress
   const ni = nearestIdx(c.x, c.z, c.idx - 3, TR.MAP.win || 14);
-  if (c.idx > N - 8 && ni < 8) { c.lap++; if (state === 'race') { if (GMODE !== 'shop') lapDone(c); if (checkout && c.lap >= 1) { checkout.react('cheer', FIN(c) ? 4 : 1.4); if (FIN(c) && (c === player || !finishOrder.length)) { const cs = checkout.cashiers[0]; if (cs) say(cs, finishOrder.length ? '수고하셨어요~!' : '축하합니다~! 🎉', 2.2, true); } } if (GMODE !== 'shop') paLap(c); else if (FIN(c) && !finishOrder.length) paSay(`${esc(c.name)} 고객님 1등으로 계산 완료~! 축하드립니다!`); } if (FIN(c) && !c.finished && state === 'race') { c.finished = true; c.time = raceT; finishOrder.push(c); if (c === player) { sound.fanfare(); if (MODE === 'solo') endRace(); else mpFinish(); } } else if (!c.ai && GMODE === 'shop' && state === 'race') { flash(`🧾 아직 목록이 남았어요 (${shop.got(c)}/${shop.S(c).list.length})! 한 바퀴 더~`); sound.lap(); } else if (!c.ai && c.lap < LAPS) { flash(`랩 ${c.lap + 1}/${LAPS}!`); sound.lap(); } }
+  if (c.idx > N - 8 && ni < 8) { c.lap++; if (state === 'race') { if (GMODE !== 'shop') lapDone(c); if (checkout && c.lap >= 1) { checkout.react('cheer', FIN(c) ? 4 : 1.4); if (FIN(c) && (c === player || !finishOrder.length)) { const cs = checkout.cashiers[0]; if (cs) say(cs, finishOrder.length ? '수고하셨어요~!' : '축하합니다~! 🎉', 2.2, true); } } if (GMODE !== 'shop') paLap(c); else if (FIN(c) && !finishOrder.length) paSay(`${esc(c.name)} 고객님 1등으로 계산 완료~! 축하드립니다!`); } if (FIN(c) && !c.finished && state === 'race') { c.finished = true; c.time = raceT; finishOrder.push(c); if (MODE !== 'guest' || c === player) say(c, cline(c, 'win', ['야호~!']), 2.2, true); if (c === player) { sound.fanfare(); if (GMODE === 'shop') startSpectate(); else if (MODE === 'solo') endRace(); else mpFinish(); } } else if (!c.ai && GMODE === 'shop' && state === 'race') { flash(`🧾 아직 목록이 남았어요 (${shop.got(c)}/${shop.S(c).list.length})! 한 바퀴 더~`); sound.lap(); } else if (!c.ai && c.lap < LAPS) { flash(`랩 ${c.lap + 1}/${LAPS}!`); sound.lap(); } }
   else if (c.idx < 8 && ni > N - 8) c.lap--;
   c.idx = ni; c.prog = c.finished ? 1e6 - c.time : c.lap * N + c.idx;
 }
@@ -397,11 +400,11 @@ function updateCustomers(dt) {
 }
 
 function endRace() {
-  state = 'finished'; startCut(finishOrder[0] || player);
+  endSpectate(); state = 'finished'; startCut(SHOPON() ? shopRows()[0].c : finishOrder[0] || player);
   cutDone = () => {
     if (SHOPON()) { const rows = shopRows(), me = rows.findIndex(r => r.c === player); $('finTitle').textContent = me === 0 ? '🏆 장보기 1등!' : `장보기 ${me + 1}위`;
       $('finBody').innerHTML = receiptHTML(rows, carts.indexOf(player)); $('finish').classList.add('pod', 'shop'); $('finish').classList.remove('hidden');
-      FX.showPodium(rows.map(r => ({ name: r.name, pal: r.c.pal, color: r.c.color })), textSprite); return; }
+      FX.showPodium(rows.map(r => ({ name: r.name, char: r.c.char, color: r.c.color })), textSprite); return; }
     const rank = finishOrder.indexOf(player) + 1;
     $('finTitle').textContent = rank === 1 ? '🏆 우승!' : `결승! ${rank}위`;
     const rows = finishOrder.map((c, i) => `${i + 1}위 ${c.name} — ${fmt(c.time)}`).join('<br>');
@@ -409,7 +412,7 @@ function endRace() {
     $('finBody').innerHTML = `${rows}<br><br>기록: <b>${fmt(player.time)}</b> · 맵: ${TR.MAP.icon} ${TR.MAP.name}<br>🏅 이 맵 최고 랩: <b>${best ? fmt(best) : '-'}</b>${player.newBest ? ' <span class="nb">신기록!</span>' : ''}<br>넘어뜨린 손님: ${stats.knocked}명 · 떨어뜨린 상품: ${stats.spilled}개<br>혼돈 지수: <b>${chaos()}</b>`;
     $('finish').classList.add('pod'); $('finish').classList.remove('shop', 'hidden');
     const rest = carts.filter(c => !c.inactive && !finishOrder.includes(c)).sort((a, b) => b.prog - a.prog);
-    FX.showPodium([...finishOrder, ...rest].map(c => ({ name: c.name, pal: c.pal, color: c.color })), textSprite);
+    FX.showPodium([...finishOrder, ...rest].map(c => ({ name: c.name, char: c.char, color: c.color })), textSprite);
   };
 }
 const chaos = () => stats.knocked * 100 + stats.spilled * 10;
@@ -482,8 +485,11 @@ function drawMinimap() {
 }
 
 // ---------- fun systems: drift FX, items, events ----------
-let annT = null;
-function announce(t) { const el = $('event'); el.textContent = '📢 ' + t; el.classList.add('show'); clearTimeout(annT); annT = setTimeout(() => el.classList.remove('show'), 3500); }
+let annUntil = 0, msgUntil = 0;
+function announce(t) { const el = $('event'); el.textContent = '📢 ' + t; el.classList.add('show'); annUntil = Date.now() + 3500; }
+// watchdog for every toast/banner (wall clock, independent of the game loop / timer throttling)
+setInterval(() => { const now = Date.now(); if (annUntil && now > annUntil) { annUntil = 0; $('event').classList.remove('show'); }
+  const m = $('msg'); if (m.textContent && !msgUntil) msgUntil = now + 4000; if (!m.textContent) msgUntil = 0; else if (now > msgUntil) { m.textContent = ''; msgUntil = 0; } }, 250);
 let fun = null, funOwned = null, checkout = null, shop = null;
 const QS = new URLSearchParams(location.search);
 let GMODE = (QS.get('mode') || localStorage.getItem('cartMode')) === 'shop' ? 'shop' : 'race', TLIM = QS.has('notime') ? false : localStorage.getItem('cartTlim') !== '0';
@@ -495,8 +501,8 @@ function shopFx(c, f) {
   if (kind === 'grab') {
     if (near) { FX.comic(c.x, 2.4 + y, c.z, why === 'wrong' ? `${g.i}?` : `+${g.i}`, why === 'wrong' ? '#9e9e9e' : why === 'sale' ? '#ff1744' : '#69f0ae'); puff(c.x, 1.3, c.z, why === 'sale' ? 0xff1744 : 0xfff176, LOWFX ? 3 : 6); }
     if (c === player) { if (why === 'wrong') { flash(`앗, 목록에 없는 ${g.n}… (-100점)`); sound.empty(); } else { const n = shop.got(c), L = shop.S(c).list.length; flash(why === 'sale' ? `🏷️ 할인 ${g.n}! (${n}/${L})` : `🛒 ${g.n} 담았다! (${n}/${L})`); sound.charge();
-        if (shop.complete(c)) { setTimeout(() => { if (!c.finished) flash('🧾 목록 완료! 계산대(결승선)로 가세요!'); }, 900); say(c, pick(['다 샀다~!', '이제 계산하러 가자!']), 1.6, true); } } }
-    else if (near && Math.random() < 0.3 && MODE !== 'guest') say(c, pick([`${g.n} 득템!`, '찾았다~', '이거다!']), 1.2);
+        if (shop.complete(c)) { setTimeout(() => { if (!c.finished) flash('🧾 목록 완료! 계산대(결승선)로 가세요!'); }, 900); say(c, cline(c, 'grab', ['다 샀다~!']), 1.6, true); } } }
+    else if (near && Math.random() < 0.3 && MODE !== 'guest') say(c, cline(c, 'grab', ['찾았다~']), 1.2);
   } else if (kind === 'drop') {
     if (near) { FX.comic(c.x, 2.2 + y, c.z, `${g.i} 툭!`, '#ffab40'); puff(c.x, 1, c.z, g.c, LOWFX ? 3 : 6); }
     if (MODE !== 'guest' && products.length < MAXP) spawnProduct(c.x, 1.4 + y, c.z, (Math.random() - .5) * 4, 3, (Math.random() - .5) * 4);
@@ -632,9 +638,9 @@ function startRaceMP(slots, you, mode) {
     c.remote = mode === 'host' && !!s && s.type === 'human' && i !== you;
     c.net = mode === 'guest' && i !== you;
     if (c.inactive) { c.x = 999; c.z = 999; c.prog = -1e9; }
-    nameTag(c, mode !== 'solo' && s && i !== you ? s.name : null);
+    if (s && s.char) setCartChar(c, s.char); nameTag(c, s && i !== you ? s.name : null);
   });
-  player = carts[you]; player.ai = false; player.name = slots[you] ? slots[you].name : '나';
+  endSpectate(); player = carts[you]; player.ai = false; player.name = slots[you] ? slots[you].name : '나';
   if (shop) { shop.setActive(GMODE === 'shop'); if (GMODE === 'shop') { if (mode !== 'guest') shop.newRace(); else for (const c of carts) c.shop = { list: [], items: [] }; } }
   $('lapLbl').textContent = GMODE === 'shop' ? '🧾 목록' : '🏁 랩'; $('shopHud').classList.toggle('hidden', GMODE !== 'shop'); shopHudSig = '';
   $('finish').classList.add('hidden'); $('title').classList.add('hidden');
@@ -656,9 +662,21 @@ let cutDone = null;
 addEventListener('keydown', e => { if (cut && cut.t > 0.6 && !e.repeat && e.code !== 'ArrowUp') endCut(); });
 addEventListener('pointerdown', e => { if (cut && cut.t > 0.6 && !e.target.closest?.('#mute,#auto,#finish')) endCut(); });
 function podiumFromRows(rows) {
-  return rows.slice(0, 3).map(r => { const c = carts.find(k => k.name === r.name) || carts.find(k => r.name.startsWith(k.baseName)); return { name: r.name, pal: c && c.pal, color: c ? c.color : 0x888888 }; });
+  return rows.slice(0, 3).map(r => { const c = carts.find(k => k.name === r.name) || carts.find(k => r.name.startsWith(k.baseName)); return { name: r.name, char: c && c.char, color: c ? c.color : 0x888888 }; });
 }
-const SOLO_SLOTS = () => carts.map((c, i) => ({ type: i ? 'bot' : 'human', name: c.baseName }));
+const SOLO_SLOTS = () => { const others = ROSTER.filter(r => r.id !== MYCHAR).sort(() => Math.random() - 0.5); return carts.map((c, i) => i ? { type: 'bot', name: others[i - 1].name, char: others[i - 1].id } : { type: 'human', name: '나', char: MYCHAR }); };
+// ---------- spectator (shopping mode: after you check out, watch the others; solo can fast-forward) ----------
+let spec = null;
+const specList = () => carts.filter(c => !c.inactive && !c.finished && c !== player).sort((a, b) => b.prog - a.prog);
+function specCart() { if (!spec) return player; const L = specList(); return L.length ? L[spec.i % L.length] : player; }
+function startSpectate() { spec = { i: 0, ff: false, t0: raceT }; flash('🧾 계산 완료! 다른 손님을 기다리는 중…'); msgT = 3; $('spec').classList.remove('hidden'); $('specFF').classList.toggle('hidden', MODE !== 'solo'); camPos.set(0, 0, 0); specUi(); }
+function endSpectate() { if (!spec) return; spec = null; $('spec').classList.add('hidden'); camPos.set(0, 0, 0); }
+let specSig = '';
+function specUi() { if (!spec) return; const c = specCart(), sig = `${c.name}|${SHOPON() ? shop.got(c) + '/' + shop.S(c).list.length : ''}|${spec.ff}|${specList().length}`; if (sig === specSig) return; specSig = sig;
+  $('specName').textContent = c === player ? '👀 관전 중 · 모두 계산 완료!' : `👀 관전 중: ${c.name}${SHOPON() ? ` (목록 ${shop.got(c)}/${shop.S(c).list.length})` : ''} · 남은 손님 ${specList().length}명`;
+  $('specFF').textContent = spec.ff ? '⏩ 빨리 감기 중… (x24)' : '⏩ 빨리 감기'; $('specFF').classList.toggle('on', spec.ff); }
+$('specNext').onclick = e => { e.stopPropagation(); if (spec) { spec.i++; camPos.set(0, 0, 0); specSig = ''; specUi(); } };
+$('specFF').onclick = e => { e.stopPropagation(); if (spec && MODE === 'solo') { spec.ff = !spec.ff; specSig = ''; specUi(); } };
 function onRemoteState(i, s) { const c = carts[i]; if (c && c.remote) c.rs = s; }
 function onRemoteItem(i) { const c = carts[i]; if (c && c.remote) c.useItem = true; }
 function onSpawn(a) { if (MODE === 'host' && products.length < MAXP + 20) spawnProduct(...a.slice(0, 6).map(Number)); }
@@ -738,7 +756,8 @@ function mpTick(dt) {
     if (state === 'race' && !mpDone) {
       const humans = carts.filter(c => !c.inactive && (c === player || c.remote));
       if (!firstFinT && carts.some(c => !c.inactive && c.finished)) firstFinT = raceT;
-      if (humans.every(c => c.finished) || (firstFinT && raceT - firstFinT > (GMODE === 'shop' ? 45 : 30)) || (SHOPON() && TLIM && raceT >= T_LIMIT)) {
+      const allDone = carts.every(c => c.inactive || c.finished);
+      if (SHOPON() ? (allDone || (firstFinT && raceT - firstFinT > 45) || (TLIM && raceT >= T_LIMIT)) : (humans.every(c => c.finished) || (firstFinT && raceT - firstFinT > 30))) {
         mpDone = true; const act = carts.filter(c => !c.inactive);
         const order = [...finishOrder.filter(c => !c.inactive), ...act.filter(c => !c.finished).sort((a, b) => b.prog - a.prog)];
         if (SHOPON()) hostResults(shopRows().map(r => ({ name: r.name, time: r.time, bot: r.bot, i: r.i, score: r.score, rc: r.rc })));
@@ -752,6 +771,7 @@ function mpTick(dt) {
   }
 }
 function showResults(rows) {
+  endSpectate();
   state = 'finished'; $('finTitle').textContent = rows[0] && rows[0].rc ? '🧾 장보기 결과' : '🏁 경주 결과';
   if (rows[0] && rows[0].rc) $('finBody').innerHTML = receiptHTML(rows, carts.indexOf(player)) + '<i>잠시 후 로비로 돌아갑니다…</i>'; else $('finBody').innerHTML = rows.map((r, i) => `${i + 1}위 ${r.name.replace(/[<>&]/g, '')}${r.bot ? ' 🤖' : ''} — ${r.time != null ? fmt(r.time) : '미완주'}`).join('<br>') + '<br><br><i>잠시 후 로비로 돌아갑니다…</i>';
   $('restart').classList.add('hidden');
@@ -759,18 +779,20 @@ function showResults(rows) {
   if (cut) { cutDone = show; cut.dur = Math.min(cut.dur, cut.t + 1.2); setTimeout(endCut, 1500); } else show();
 }
 function toLobby() {
+  endSpectate();
   cut = null; cutDone = null; $('cutbar').classList.remove('show'); FX.hidePodium(); showIntro(false); $('finish').classList.remove('pod');
   $('finish').classList.add('hidden'); $('restart').classList.remove('hidden'); fun.reset();
   carts.forEach((c, i) => { const was = c.inactive; resetCart(c, i); c.inactive = was; if (was) { c.x = c.z = 999; } });
   state = 'lobby'; $('countdown').textContent = '';
 }
 function leftRoom() {
+  endSpectate();
   MODE = 'solo'; fun.reset(); cut = null; cutDone = null; $('cutbar').classList.remove('show'); FX.hidePodium(); showIntro(false); $('finish').classList.remove('pod');
   carts.forEach((c, i) => { resetCart(c, i); c.g.root.visible = true; c.ai = i > 0; c.name = c.baseName; nameTag(c, null); });
   for (const cu of customers) { cu.nt = null; if (cu.state !== 'walk' || !cu.body) { if (cu.body) { world.removeBody(cu.body); cu.body = null; } cu.state = 'walk'; cu.cart = null; cu.rush = null; cu.holder.scale.setScalar(1); cu.holder.rotation.set(0, 0, 0); cu.x = cu.holder.position.x; cu.z = cu.holder.position.z; cu.holder.position.y = 0.85 + hAt(cu.x, cu.z); pushOut(cu, 0.5); retarget(cu); } }
   player = carts[0]; state = 'lobby'; $('finish').classList.add('hidden'); $('restart').classList.remove('hidden');
 }
-initNet({ getOpts: () => ({ gmode: GMODE, tlim: TLIM }), onOpts, getMap: () => TR.MAP_ID, onMap: id => { if (id !== TR.MAP_ID) loadMap(id); }, renderMaps: () => renderMaps(), onRemoteHazard: (i, id, sh) => { const c = carts[i]; if (c && c.remote) fun.remoteHazardHit(c, id, sh); }, startRace: startRaceMP, onRemoteState, onRemoteCrash, onRemoteItem, onSpawn, slotToBot, onSnap, onSay, onSlots, showResults, toLobby, leftRoom,
+initNet({ getChar: () => MYCHAR, getOpts: () => ({ gmode: GMODE, tlim: TLIM }), onOpts, getMap: () => TR.MAP_ID, onMap: id => { if (id !== TR.MAP_ID) loadMap(id); }, renderMaps: () => renderMaps(), onRemoteHazard: (i, id, sh) => { const c = carts[i]; if (c && c.remote) fun.remoteHazardHit(c, id, sh); }, startRace: startRaceMP, onRemoteState, onRemoteCrash, onRemoteItem, onSpawn, slotToBot, onSnap, onSay, onSlots, showResults, toLobby, leftRoom,
   onMenu: open => { if (state === 'title' || state === 'lobby') state = open ? 'lobby' : 'title'; } });
 
 // ---------- loop ----------
@@ -789,7 +811,9 @@ function frame(now) {
   let dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (cut) { cut.t += dt; if (cut.t > cut.dur) endCut(); }
   const ts = cut && MODE === 'solo' ? (cut.t < 2.6 ? 0.3 : 0.7) : 1;
-  if (!FX.podiumActive()) step(dt * ts); else if (MODE === 'host') step(dt); render(dt); adapt(now);
+  if (spec && spec.ff && MODE === 'solo' && state === 'race') { for (let k = 0; k < 12 && state === 'race'; k++) step(1 / 30); }
+  else if (!FX.podiumActive()) step(dt * ts); else if (MODE === 'host') step(dt);
+  render(dt); adapt(now); tickCharPrev(dt);
 }
 // a hidden host tab gets no rAF; keep the room simulated & snapshots flowing (browsers throttle this to ~1Hz)
 setInterval(() => { if (document.hidden && MODE === 'host') { const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now; step(dt); } }, 100);
@@ -799,13 +823,14 @@ function step(dt) {
     const before = Math.ceil(cd); cd -= dt; const n = Math.ceil(cd); if (n !== before && n > 0 && n <= 3) sound.beep();
     if (cd <= 3.99) showIntro(false);
     $('countdown').textContent = cd > 3.99 ? '' : cd > 0 ? n : '출발!'; $('countdown').className = cd <= 3.99 && cd > 0 ? 'n' + n : cd <= 0 ? 'go' : '';
-    if (cd <= 0) { state = 'race'; sound.go(); setTimeout(() => { if (state === 'race') paSay(GMODE === 'shop' ? '딩동~ 장보기 대회 시작! 목록의 물건을 담아 계산대로 와 주세요~' : pick(['고객 여러분, 카트 레이스가 시작됩니다! 안전 운전 부탁드립니다~', '딩동~ 지금부터 마트 카트 레이스를 시작합니다!'])); }, 1200); setTimeout(() => { if ($('countdown').textContent === '출발!') $('countdown').textContent = ''; }, 800); }
+    if (cd <= 0) { state = 'race'; sound.go(); carts.forEach((c, i) => { if (!c.inactive && (c === player || (MODE !== 'guest' && Math.random() < 0.6))) setTimeout(() => { if (state === 'race') say(c, cline(c, 'start', ['출발!']), 1.6); }, 400 + i * 450); }); setTimeout(() => { if (state === 'race') paSay(GMODE === 'shop' ? '딩동~ 장보기 대회 시작! 목록의 물건을 담아 계산대로 와 주세요~' : pick(['고객 여러분, 카트 레이스가 시작됩니다! 안전 운전 부탁드립니다~', '딩동~ 지금부터 마트 카트 레이스를 시작합니다!'])); }, 1200); setTimeout(() => { if ($('countdown').textContent === '출발!') $('countdown').textContent = ''; }, 800); }
   } else if (state === 'race' || state === 'finished') raceT += state === 'race' ? dt : 0;
   if (state === 'finished') for (const c of carts) if (!c.finished) { c.prog = c.lap * N + c.idx; }
   for (const c of carts) updateCart(c, dt);
   interactions(dt);
   if (SHOPON() && MODE !== 'guest') shop.update(dt, state, raceT, MODE);
   if (SHOPON() && TLIM && state === 'race' && raceT >= T_LIMIT && MODE === 'solo') { flash('⏰ 영업 종료! 시간 초과'); endRace(); }
+  if (SHOPON() && MODE === 'solo' && state === 'race' && player.finished && (carts.every(c => c.inactive || c.finished) || (!TLIM && raceT - player.time > 150))) endRace();
   fun.update(dt, state, raceT, MODE === 'guest');
   updateMapFx(dt); trk.tick(dt);
   if (MODE === 'guest') guestCustomers(dt); else updateCustomers(dt);
@@ -818,11 +843,15 @@ function step(dt) {
   msgT -= dt; if (msgT <= 0) $('msg').textContent = '';
 }
 function render(dt) {
-  for (const c of carts) { if (c.inactive) continue; { const fx = Math.sin(c.h), fz = Math.cos(c.h); c.g.root.position.set(c.x, hAt(c.x, c.z), c.z); c.g.root.rotation.x = -Math.atan((hAt(c.x + fx, c.z + fz) - hAt(c.x - fx, c.z - fz)) / 2); } c.drift = (c.drift || 0) + ((c.steerIn || 0) * Math.min(1, Math.abs(c.v) / 18) * 0.28 - (c.drift || 0)) * Math.min(1, dt * 5); c.g.root.rotation.y = c.h + (c.drifting ? 0 : c.drift * 0.5); c.g.update(c.v, dt);
+  for (const c of carts) { if (c.inactive) continue; { const fx = Math.sin(c.h), fz = Math.cos(c.h); c.g.root.position.set(c.x, hAt(c.x, c.z), c.z); c.g.root.rotation.x = -Math.atan((hAt(c.x + fx, c.z + fz) - hAt(c.x - fx, c.z - fz)) / 2); } c.drift = (c.drift || 0) + ((c.steerIn || 0) * Math.min(1, Math.abs(c.v) / 18) * 0.28 - (c.drift || 0)) * Math.min(1, dt * 5); c.g.root.rotation.y = c.h + (c.drifting ? 0 : c.drift * 0.5);
+    c.angryT = (c.angryT || 0) - dt; if ((c.hitSeq || 0) !== (c._hs || 0)) { c._hs = c.hitSeq || 0; c.angryT = 1.6; } if ((c.lastHit || 0) > 0.3) c.angryT = Math.max(c.angryT, 1.2);
+    c.g.pose = c.finished || (cut && cut.target === c) ? 'win' : null;
+    c.g.face(c.finished ? 'win' : c.spin > 0 ? 'dizzy' : c.angryT > 0 ? 'angry' : c.drifting ? 'focus' : (c.boostT > 0 || c.instT > 0) ? 'happy' : Math.abs(c.slip || 0) > 0.5 ? 'shock' : 'normal');
+    c.g.update(c.v, dt);
     if (Math.abs(c.slip || 0) > 0.12 && Math.abs(c.v) > 5) { c.skT = (c.skT || 0) - dt; if (c.skT <= 0) { c.skT = 0.04; fun.skid(c); if (c.drifting && Math.random() < 0.5) puff(c.x - Math.sin(c.h) * 0.6, 0.2, c.z - Math.cos(c.h) * 0.6, Math.random() < 0.5 ? 0xffb300 : 0xdddddd, 1); } } }
   updatePuffs(dt); updateBubbles(); drawMinimap();
   for (const p of products) { p.mesh.position.copy(p.body.position); p.mesh.quaternion.copy(p.body.quaternion); }
-  const p = player, chd = p.vd + ang(p.h - p.vd) * 0.4, fx = Math.sin(chd), fz = Math.cos(chd);
+  const p = specCart(), chd = p.vd + ang(p.h - p.vd) * 0.4, fx = Math.sin(chd), fz = Math.cos(chd);
   const py = hAt(p.x, p.z); camY += (py - camY) * Math.min(1, dt * 6); const want = new THREE.Vector3(p.x - fx * 8, 4.2 + camY, p.z - fz * 8);
   if (!(TR.MAP.camOpen || []).some(r => inRect(r, want.x, want.z) || inRect(r, p.x, p.z))) { const ci = nearestIdx(want.x, want.z, 0, N), cp = path[ci], dx = want.x - cp.x, dz = want.z - cp.y, d = Math.hypot(dx, dz), lim = TR.HW - 0.7; // keep camera inside the aisle
     if (d > lim) { want.x = cp.x + dx / d * lim; want.z = cp.y + dz / d * lim; } }
@@ -843,7 +872,7 @@ function render(dt) {
   FX.setSpeedLines(state === 'race' && !cut && (p.boostT > 0 || p.instT > 0) ? Math.min(1, 0.55 + Math.abs(p.v) / 40) : 0);
   FX.updateComic(dt); FX.updateConfetti(dt);
   // HUD
-  const active = carts.filter(c => !c.inactive), sorted = [...active].sort((a, b) => b.prog - a.prog);
+  { const p = player;   const active = carts.filter(c => !c.inactive), sorted = [...active].sort((a, b) => b.prog - a.prog);
   $('time').textContent = fmt(state === 'finished' ? p.time : raceT);
   $('lap').textContent = SHOPON() ? `${shop.got(p)}/${shop.S(p).list.length}` : `${Math.min(LAPS, Math.max(1, p.lap + 1))}/${LAPS}`; { const b = getBest(TR.MAP_ID); const t = b ? fmt(b) : '-'; if ($('best').textContent !== t) $('best').textContent = t; }
   $('rank').textContent = `${(p.finished && finishOrder.includes(p) ? finishOrder.indexOf(p) : sorted.indexOf(p)) + 1}/${active.length}`;
@@ -855,7 +884,8 @@ function render(dt) {
   $('riders').textContent = nRiders(p) ? `🛒 탑승 손님 ${'🧍'.repeat(nRiders(p))} (-${nRiders(p) * 12}% 속도)` : '';
   $('driftTxt').className = p.drifting ? 'on' : '';
   $('chaos').textContent = chaos(); $('knocked').textContent = stats.knocked; $('spilled').textContent = stats.spilled;
-  if (SHOPON()) { shop.render(dt, player); shopHud(); }
+  if (SHOPON()) { shop.render(dt, player); shopHud(); } }
+  specUi();
   document.body.classList.toggle('podium', FX.podiumActive()); FX.setPodiumShift($('finish').classList.contains('shop') ? 0.2 : 0);
   if (FX.podiumActive()) FX.renderPodium(renderer, dt); else renderer.render(scene, camera);
 }
@@ -868,6 +898,9 @@ function shopHud() {
   const sum = `<div>🧺 ${S.items.length}개 · ${won(money)}</div><div>⭐ ${sc.score.toLocaleString('ko-KR')}점</div>${left != null ? `<div class="${left < 30 ? 'warn' : ''}">⏳ ${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}</div>` : ''}${shop.complete(p) && !p.finished ? '<div class="go">🧾 계산대로 GO!</div>' : ''}`;
   const sig = rows + sum; if (sig !== shopHudSig) { shopHudSig = sig; $('shopList').innerHTML = rows; $('shopSum').innerHTML = sum; }
 }
+function updCharBtns() { const d = charOf(MYCHAR); for (const id of ['charBtn', 'lobbyChar']) { const b = $(id); if (b) b.innerHTML = `${d.emoji} <b>${d.name}</b> · 캐릭터 선택 ▸`; } }
+function chooseChar(id) { if (!id) return; MYCHAR = charOf(id).id; localStorage.setItem('cartChar', MYCHAR); if (state === 'title' || state === 'lobby') setCartChar(player, MYCHAR); updCharBtns(); setMyChar(MYCHAR); }
+$('charBtn').onclick = () => openCharSel(chooseChar); $('lobbyChar').onclick = () => openCharSel(chooseChar); updCharBtns();
 const boot = () => { loadMap(new URLSearchParams(location.search).get('map') || localStorage.getItem('cartMap') || 'mart'); camLook.set(player.x + 4, 1.2, player.z); requestAnimationFrame(frame); };
 Promise.race([document.fonts ? document.fonts.load('64px Jua') : Promise.resolve(), new Promise(r => setTimeout(r, 1500))]).catch(() => {}).then(boot);
-window.__game = { get perf() { return { fps: Math.round(fps), pr, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, quality: QUALITY }; }, debugNearFinish() { const p = player, q = path[N - 4], [tx, tz] = tangentAt(N - 4); p.x = q.x; p.z = q.y; p.idx = N - 4; p.lap = LAPS - 1; p.h = p.vd = Math.atan2(tx, tz); p.v = 10; }, loadMap, get MAP() { return TR.MAP_ID; }, get N() { return N; }, path, strips, traffic, get trk() { return trk; }, hAt, getBest, get MODE() { return MODE; }, NET, get player() { return player; }, get raceT() { return raceT; }, knock: (i, c) => knockCustomer(customers[i], c || player), startGame, hopOut, get fun() { return fun; }, insideShelf, get autoAccel() { return autoAccel; }, carts, customers, products, stats, keys, get state() { return state; }, get cut() { return cut; }, get cd() { return cd; }, skipIntro, get podium() { return FX.podiumActive(); }, get checkout() { return checkout; }, get shop() { return shop; }, get GMODE() { return GMODE; }, setMode(m, t) { GMODE = m; if (t != null) TLIM = t; if (shop) shop.setActive(GMODE === 'shop'); renderModes(); }, simulate(sec) { const h = 1 / 30; for (let t = 0; t < sec; t += h) { step(h); if (SHOPON()) shop.render(h, player); } } };
+window.__game = { get perf() { return { fps: Math.round(fps), pr, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, quality: QUALITY }; }, debugNearFinish() { const p = player, q = path[N - 4], [tx, tz] = tangentAt(N - 4); p.x = q.x; p.z = q.y; p.idx = N - 4; p.lap = LAPS - 1; p.h = p.vd = Math.atan2(tx, tz); p.v = 10; }, loadMap, get MAP() { return TR.MAP_ID; }, get N() { return N; }, path, strips, traffic, get trk() { return trk; }, hAt, getBest, get MODE() { return MODE; }, NET, get player() { return player; }, get raceT() { return raceT; }, knock: (i, c) => knockCustomer(customers[i], c || player), startGame, hopOut, get fun() { return fun; }, insideShelf, get autoAccel() { return autoAccel; }, carts, customers, products, stats, keys, get state() { return state; }, get cut() { return cut; }, get cd() { return cd; }, skipIntro, get podium() { return FX.podiumActive(); }, get checkout() { return checkout; }, get shop() { return shop; }, get spec() { return spec; }, specFF(on = true) { if (spec) { spec.ff = on; specSig = ''; } }, ROSTER, chooseChar, paHide: FX.paHide, pa: t => paSay(t), announce: t => announce(t), flash: t => flash(t), openCharSel: () => openCharSel(chooseChar), setLineup, get MYCHAR() { return MYCHAR; }, get GMODE() { return GMODE; }, setMode(m, t) { GMODE = m; if (t != null) TLIM = t; if (shop) shop.setActive(GMODE === 'shop'); renderModes(); }, simulate(sec) { const h = 1 / 30; for (let t = 0; t < sec; t += h) { step(h); if (SHOPON()) shop.render(h, player); } } };

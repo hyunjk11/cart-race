@@ -99,7 +99,7 @@ export function createFun(G) {
     if (c.shieldT > 0) { c.shieldT = 0; G.say(c, '실드로 막았다!', 1.3, true); G.puff(c.x, 1, c.z, 0x80d8ff, 6); return; }
     if (G.onHit) G.onHit(c, by);
     c.hitSeq = (c.hitSeq || 0) + 1; c.spin = 1.1; c.v *= 0.35; c.drifting = false; G.puff(c.x, 0.8, c.z, 0xffffff, 6); if (G.comic && (c === G.player || by === G.player || Math.hypot(c.x - G.player.x, c.z - G.player.z) < 20)) G.comic(c.x, 2 + hAt(c.x, c.z), c.z, ['POW!', '퍽!', '빙글~', 'BAM!'][(Math.random() * 4) | 0], '#ff4081'); if (c === G.player && G.screenFlash) G.screenFlash('#fff', 0.45);
-    G.say(c, ['으아악~', '빙글빙글~', '누구야!'][(Math.random() * 3) | 0], 1.5, true);
+    { const L = (c.lines && c.lines.hit) || ['으아악~', '빙글빙글~', '누구야!']; G.say(c, L[(Math.random() * L.length) | 0], 1.5, true); }
     if (c === G.player) { G.shakeIt(0.7); G.flash('당했다! 🌀'); sound.bump(1); } else if (by === G.player) { G.flash(`${c.name} 명중! 🎯`); sound.oof(); }
   }
   function useItem(c) {

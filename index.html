@@ -32,6 +32,7 @@
  <div class="logo">🛒💨</div><h1>마트 카트 레이싱</h1><p class="sub">드리프트로 N2O를 모으고, 아이템으로 라이벌을 막고, 마트를 혼돈에 빠뜨려라!</p>
  <div class="mapsel"><div class="mlabel">🎮 모드</div><div id="modeRow" class="maprow"></div><div id="modeDesc" class="note"></div></div>
  <div class="mapsel"><div class="mlabel">🗺️ 맵 선택</div><div id="mapRow" class="maprow"></div><div id="mapDesc" class="note"></div></div>
+ <button id="charBtn" class="charbtn"></button>
  <div class="tbtns"><button id="startBtn">🏁 혼자 하기</button><button id="mpBtn">🌐 멀티플레이</button></div>
  <div class="qrow">화질 <select id="quality"><option value="auto">자동</option><option value="low">낮음 (저사양 · 효과 줄임)</option><option value="high">높음</option></select></div>
  <div class="ctl desk">⌨️ ↑/W 가속 · ↓/S 브레이크 · ←→ 조향 · <b>Shift+방향 드리프트</b> · 스페이스 N2O · E 아이템 · T 자동가속 · M 소리</div>
@@ -47,10 +48,15 @@
   <button id="mpBack" class="sec">← 뒤로</button></div>
  <div id="mpLobby" class="hidden"><h2>대기실 · 방 코드 <span id="roomCode"></span></h2>
   <div class="joinrow"><input id="invite" readonly><button id="copyBtn">복사</button></div>
-  <div id="slots"></div><div id="lobbyModes" class="maprow small"></div><div id="lobbyModeNote" class="note"></div><div id="lobbyMaps" class="maprow small"></div><div id="lobbyMapNote" class="note"></div><div id="lobbyHint" class="note"></div><div id="lobbyMsg"></div>
+  <div id="slots"></div><button id="lobbyChar" class="charbtn small"></button><div id="lobbyModes" class="maprow small"></div><div id="lobbyModeNote" class="note"></div><div id="lobbyMaps" class="maprow small"></div><div id="lobbyMapNote" class="note"></div><div id="lobbyHint" class="note"></div><div id="lobbyMsg"></div>
   <div class="lbtns"><button id="addBot">🤖 봇 추가</button><button id="readyBtn">준비</button><button id="startRace">🏁 경주 시작</button><button id="leaveBtn" class="sec">나가기</button></div>
   <div id="chatLog"></div><input id="chatIn" maxlength="80" placeholder="채팅 입력 후 Enter">
  </div></div></div>
+<div id="charSel" class="hidden"><div class="panel cspanel"><h2>🧑 캐릭터 선택</h2>
+ <div class="csmain"><canvas id="charPrev"></canvas><div id="charInfo"></div></div><div id="lineupNames"></div>
+ <div id="charRow" class="charrow"></div>
+ <div class="lbtns"><button id="charLineup" class="sec">👥 전체 보기</button><button id="charBack" class="sec">취소</button><button id="charOk">✅ 선택 완료</button></div></div></div>
+<div id="spec" class="hidden"><span id="specName"></span><button id="specNext">다음 손님 ▶</button><button id="specFF">⏩ 빨리 감기</button></div>
 <div id="finish" class="hidden"><div class="panel"><h1 id="finTitle">결승!</h1><div id="finBody"></div><button id="restart">다시 시작</button></div></div>
 <script type="module" src="js/main.js"></script>
 </body></html>

@@ -1,4 +1,5 @@
 // Online multiplayer: host-authoritative P2P over WebRTC using PeerJS (public PeerJS cloud broker).
+import { ROSTER, charOf } from './chars.js';
 const $ = id => document.getElementById(id);
 const PREFIX = 'cartrace-';
 const COLORS = ['#ff4f8b', '#43d17a', '#ffc107', '#9c5cff'];
@@ -36,7 +37,7 @@ async function createRoom(tries = 0) {
   const P = await loadPeer(); const name = nick(); msg('방을 만드는 중…');
   NET.code = genCode(); peer = new P(PREFIX + NET.code, peerOpts());
   peer.on('open', () => {
-    NET.mode = 'host'; NET.you = 0; NET.slots = [{ type: 'human', name, ready: true, id: 'host' }, null, null, null];
+    NET.mode = 'host'; NET.you = 0; NET.slots = [{ type: 'human', name, ready: true, id: 'host', char: api.getChar() }, null, null, null];
     NET.broadcast = m => { const s = JSON.stringify(m); for (const c of NET.conns.values()) if (c.open) c.send(s); };
     NET.map = api.getMap(); NET.opts = api.getOpts(); showLobby(); pushLobby(); msg('');
   });
@@ -58,11 +59,12 @@ function hostRecv(conn, m) {
     if (NET.inRace) { conn.send(JSON.stringify({ t: 'reject', msg: '이미 경주가 진행 중입니다. 잠시 후 다시 참가해 주세요.' })); setTimeout(() => conn.close(), 300); return; }
     const free = NET.slots.findIndex(s => !s);
     if (free < 0) { conn.send(JSON.stringify({ t: 'reject', msg: '방이 가득 찼습니다 (최대 4명).' })); setTimeout(() => conn.close(), 300); return; }
-    NET.slots[free] = { type: 'human', name: String(m.name || '게스트').slice(0, 10), ready: false, id: conn.peer };
+    NET.slots[free] = { type: 'human', name: String(m.name || '게스트').slice(0, 10), ready: false, id: conn.peer, char: charOf(m.char).id };
     chat(`${NET.slots[free].name} 님이 입장했습니다.`); pushLobby(); return;
   }
   if (i < 0) return;
   if (m.t === 'ready') { NET.slots[i].ready = !!m.v; pushLobby(); }
+  else if (m.t === 'char') { if (!NET.inRace) { NET.slots[i].char = charOf(m.id).id; pushLobby(); } }
   else if (m.t === 'chat') chat(`${NET.slots[i].name}: ${String(m.text).slice(0, 80)}`);
   else if (m.t === 'st') api.onRemoteState(i, m.s);
   else if (m.t === 'item') api.onRemoteItem(i);
@@ -73,12 +75,14 @@ function hostRecv(conn, m) {
 function hostDrop(peerId) {
   const conn = NET.conns.get(peerId); NET.conns.delete(peerId); const i = slotOf(peerId); if (i < 0) return;
   const s = NET.slots[i];
-  if (NET.inRace) { NET.slots[i] = { type: 'bot', name: s.name + ' (봇)', ready: true, id: 'bot' + i }; api.slotToBot(i); chat(`${s.name} 님의 연결이 끊겨 봇으로 대체됩니다.`); }
+  if (NET.inRace) { NET.slots[i] = { type: 'bot', name: s.name + ' (봇)', ready: true, id: 'bot' + i, char: s.char }; api.slotToBot(i); chat(`${s.name} 님의 연결이 끊겨 봇으로 대체됩니다.`); }
   else { NET.slots[i] = null; chat(`${s.name} 님이 나갔습니다.`); }
   pushLobby();
 }
 const BOTN = ['초록 봇', '노랑 봇', '보라 봇'];
-function addBot() { const f = NET.slots.findIndex(s => !s); if (f < 0) return; NET.slots[f] = { type: 'bot', name: BOTN[(f - 1 + 3) % 3], ready: true, id: 'bot' + f }; pushLobby(); }
+function addBot() { const f = NET.slots.findIndex(s => !s); if (f < 0) return; const used = new Set(NET.slots.filter(Boolean).map(s => s.char)), free = ROSTER.filter(r => !used.has(r.id)), d = free[(Math.random() * free.length) | 0] || ROSTER[f];
+  NET.slots[f] = { type: 'bot', name: d.name + ' 봇', ready: true, id: 'bot' + f, char: d.id }; pushLobby(); }
+export function setMyChar(id) { if (NET.mode === 'host' && NET.slots[0] && !NET.inRace) { NET.slots[0].char = id; pushLobby(); } else if (NET.mode === 'guest') NET.send({ t: 'char', id }); }
 function removeSlot(i) {
   const s = NET.slots[i]; if (!s || i === 0) return;
   if (s.type === 'human') { const c = NET.conns.get(s.id); if (c) { c.send(JSON.stringify({ t: 'kicked' })); setTimeout(() => c.close(), 200); } chat(`${s.name} 님을 내보냈습니다.`); }
@@ -92,7 +96,7 @@ export function pushLobby() {
 function canStart() { const n = NET.slots.filter(Boolean).length; return n >= 2 && NET.slots.every(s => !s || s.ready); }
 function startRace() {
   if (!canStart()) return; NET.inRace = true;
-  const slots = NET.slots.map(s => s && { type: s.type, name: s.name });
+  const slots = NET.slots.map(s => s && { type: s.type, name: s.name, char: s.char });
   for (const [pid, c] of NET.conns) if (c.open) c.send(JSON.stringify({ t: 'start', slots, you: slotOf(pid), map: NET.map, opts: NET.opts }));
   hideMP(); api.startRace(slots, 0, 'host');
 }
@@ -108,7 +112,7 @@ async function joinRoom(code) {
   const to = setTimeout(() => { if (!opened) msg('연결 시간이 초과되었습니다. 코드 확인 또는 WebRTC 차단 여부를 확인하세요.', true); }, 15000);
   peer.on('open', () => {
     const conn = peer.connect(PREFIX + code, { reliable: true }); NET.hostConn = conn;
-    conn.on('open', () => { opened = true; clearTimeout(to); NET.mode = 'guest'; NET.send = m => conn.open && conn.send(JSON.stringify(m)); NET.send({ t: 'hello', name }); showLobby(); msg(''); });
+    conn.on('open', () => { opened = true; clearTimeout(to); NET.mode = 'guest'; NET.send = m => conn.open && conn.send(JSON.stringify(m)); NET.send({ t: 'hello', name, char: api.getChar() }); showLobby(); msg(''); });
     conn.on('data', d => { hostSeen = performance.now(); guestRecv(typeof d === 'string' ? JSON.parse(d) : d); });
     conn.on('close', () => { if (NET.mode === 'guest') leave('호스트가 방을 닫았거나 연결이 끊어졌습니다.'); });
     conn.on('error', () => msg(ERR.webrtc, true));
@@ -148,7 +152,7 @@ function renderLobby() {
   $('roomCode').textContent = NET.code;
   $('invite').value = location.origin + location.pathname + '?room=' + NET.code;
   $('slots').innerHTML = NET.slots.map((s, i) => `<div class="slot" style="border-color:${COLORS[i]}"><span class="dot" style="background:${COLORS[i]}"></span>
-    ${s ? `<b>${esc(s.name)}</b> ${s.type === 'bot' ? '🤖' : i === 0 ? '👑' : ''} ${i === NET.you ? '<i>(나)</i>' : ''} <span class="rd ${s.ready ? 'on' : ''}">${s.type === 'bot' ? '봇' : s.ready ? '준비 완료' : '대기 중'}</span>
+    ${s ? `<span class="sch" title="${esc(charOf(s.char).name)}">${charOf(s.char).emoji}</span><b>${esc(s.name)}</b> <small class="scn">${esc(charOf(s.char).name)}</small> ${s.type === 'bot' ? '🤖' : i === 0 ? '👑' : ''} ${i === NET.you ? '<i>(나)</i>' : ''} <span class="rd ${s.ready ? 'on' : ''}">${s.type === 'bot' ? '봇' : s.ready ? '준비 완료' : '대기 중'}</span>
       ${host && i > 0 ? `<button data-rm="${i}">${s.type === 'bot' ? '봇 제거' : '내보내기'}</button>` : ''}` : `<span class="empty">빈 자리</span>`}</div>`).join('');
   $('slots').querySelectorAll('[data-rm]').forEach(b => b.onclick = () => removeSlot(+b.dataset.rm));
   $('addBot').classList.toggle('hidden', !host); $('startRace').classList.toggle('hidden', !host); $('readyBtn').classList.toggle('hidden', host);

@@ -1,6 +1,7 @@
 // Presentation layer: comic hit text, screen flash, speed lines, confetti, PA banners, checkout area with cashiers, results podium.
 import * as THREE from 'three';
 import { makeChibi, makeCustomer } from './models.js';
+import { makeRacer } from './chars.js';
 const $ = id => document.getElementById(id);
 let LOW = false, cam = null;
 export function initFx(o) { LOW = o.low; cam = o.camera; }
@@ -41,10 +42,17 @@ export function updateConfetti(dt) { if (!conf || !conf.visible) return; let any
 export function confettiFloor(y) { ensureConf().userData.floor = y; }
 
 // ---------- store PA announcer ----------
-const paQ = []; let paBusy = false;
-export function pa(text, chime) { paQ.push(text); if (paQ.length > 3) paQ.shift(); if (!paBusy) nextPa(chime); }
-function nextPa(chime) { const t = paQ.shift(); if (!t) { paBusy = false; return; } paBusy = true; const el = $('pa'); el.innerHTML = `<span class="ding">🔔 딩동댕~</span> ${t}`; el.classList.add('show'); if (chime) chime();
-  setTimeout(() => { el.classList.remove('show'); setTimeout(() => nextPa(chime), 500); }, 3600); }
+// PA banner: wall-clock deadlines + watchdog, so it can never get stuck (timer throttling, overlapping messages, hidden tabs)
+const paQ = []; let paUntil = 0, paNextAt = 0, paChime = null;
+const PA_SHOW = 3400, PA_GAP = 450;
+export function pa(text, chime) { paChime = chime || paChime; paQ.push(text); if (paQ.length > 2) paQ.splice(0, paQ.length - 2); paPump(); }
+function paPump() {
+  const el = $('pa'); if (!el) return; const now = Date.now();
+  if (paUntil && now >= paUntil) { el.classList.remove('show'); paUntil = 0; paNextAt = now + PA_GAP; }
+  if (!paUntil && paQ.length && now >= paNextAt) { const t = paQ.shift(); el.innerHTML = `<span class="ding">🔔 딩동댕~</span> ${t}`; el.classList.add('show'); paUntil = now + PA_SHOW; if (paChime) paChime(); }
+}
+export function paHide() { paQ.length = 0; paUntil = 0; const el = $('pa'); if (el) el.classList.remove('show'); }
+setInterval(paPump, 200);
 
 // ---------- checkout area with cashiers next to the finish line ----------
 export function buildCheckout(scene, { path, strips, HW, inSign, hAt, textSprite, tangentAt }) {
@@ -89,7 +97,7 @@ export function showPodium(entries, textSprite) {
   entries.slice(0, 3).forEach((e, i) => { const [x, h, col] = steps[i];
     const b = new THREE.Mesh(new THREE.BoxGeometry(1.9, h, 1.6), new THREE.MeshLambertMaterial({ color: col })); b.position.set(x, h / 2, 0); sc.add(b);
     const num = textSprite(['1', '2', '3'][i], ['#f9a825', '#9e9e9e', '#e64a19'][i]); num.position.set(x, h / 2, 0.82); num.scale.set(1.2, 0.3, 1); num.center.set(0.5, 0.5); sc.add(num);
-    const ch = makeChibi(e.pal || { shirt: 0xffffff, hat: e.color || 0xff4081, hair: 0x5d4037, pants: 0x5c6bc0 }); ch.root.position.set(x, h, 0.1); ch.root.scale.setScalar(1.25); sc.add(ch.root);
+    const ch = e.char ? makeRacer(e.char, { low: LOW }) : makeChibi(e.pal || { shirt: 0xffffff, hat: e.color || 0xff4081, hair: 0x5d4037, pants: 0x5c6bc0 }); ch.root.position.set(x, h, 0.1); ch.root.scale.setScalar(1.25); sc.add(ch.root);
     const nm = textSprite(e.name, '#' + (e.color ?? 0x333333).toString(16).padStart(6, '0')); nm.position.set(x, h + 2.6, 0); nm.scale.set(2.2, 0.55, 1); sc.add(nm);
     chars.push({ ch, i }); });
   const pc = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100);
@@ -102,7 +110,7 @@ export function renderPodium(renderer, dt) {
   const P = pod; P.t += dt; const port = innerWidth < innerHeight;
   P.pc.aspect = innerWidth / innerHeight; P.pc.fov = port ? 70 : 45; if (podShift && !port) P.pc.setViewOffset(innerWidth, innerHeight, innerWidth * podShift, 0, innerWidth, innerHeight); else P.pc.clearViewOffset(); P.pc.updateProjectionMatrix();
   const a = Math.sin(P.t * 0.4) * 0.35; P.pc.position.set(Math.sin(a) * 9, 3.6, Math.cos(a) * 9); P.pc.lookAt(0, port ? 3.2 : 1.4, 0);
-  for (const { ch, i } of P.chars) { if (i === 0) ch.cheer(P.t, 1); else ch.cheer(P.t + i, 0.45); ch.root.rotation.y = Math.sin(P.t * 1.5 + i) * 0.3; }
+  for (const { ch, i } of P.chars) { if (i === 0 && ch.win) ch.win(P.t); else if (i === 0) ch.cheer(P.t, 1); else ch.cheer(P.t + i, 0.45); if (ch.tick) ch.tick(dt); if (!(i === 0 && ch.def && ch.def.win === 'spin')) ch.root.rotation.y = Math.sin(P.t * 1.5 + i) * 0.3; }
   if (Math.random() < dt * 1.5) confetti(P.sc, (Math.random() - .5) * 6, 7, 0, 30, 6);
   updateConfetti(dt); renderer.render(P.sc, P.pc);
 }
