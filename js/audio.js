@@ -69,6 +69,7 @@ export const sound = {
   charge() { tone(988, 0.1, 'square', 0.12); tone(1319, 0.18, 'square', 0.12, 0.08); },
   honk() { tone(392, 0.28, 'square', 0.16); tone(330, 0.28, 'square', 0.14); tone(392, 0.3, 'square', 0.16, 0.34); tone(330, 0.3, 'square', 0.14, 0.34); },
   door() { noise(0.18, 1800, 0.18); tone(240, 0.12, 'triangle', 0.1); },
+  pa() { tone(784, 0.35, 'sine', 0.16); tone(659, 0.35, 'sine', 0.16, 0.3); tone(523, 0.5, 'sine', 0.16, 0.6); },
   lap() { tone(880, 0.12, 'square', 0.15); tone(1175, 0.2, 'square', 0.15, 0.12); },
 };
 // light looping supermarket-style tune (bouncy major key)

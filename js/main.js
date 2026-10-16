@@ -4,7 +4,8 @@ import * as TR from './track.js';
 import { LAPS, MAPS, MAP_IDS, setMap, buildWorld, textSprite, path, strips, hAt, zoneAt, inRect, atLane, tangentAt } from './track.js';
 import { createFun, ITEMS } from './fun.js';
 import { initNet, NET, hostResults, pushLobby } from './net.js';
-import { makeCart, makePerson } from './models.js';
+import { makeCart, makeCustomer } from './models.js';
+import * as FX from './fx.js';
 import { initAudio, suspendAudio, sound, setEngine, setDrift, setMuted, isMuted, onMuteChange } from './audio.js';
 
 const $ = id => document.getElementById(id);
@@ -16,6 +17,7 @@ let pr = PR_MAX; renderer.setPixelRatio(pr); renderer.setSize(innerWidth, innerH
 document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0xbfd4e6); scene.fog = new THREE.Fog(0xbfd4e6, 40, 110);
 const camera = new THREE.PerspectiveCamera(innerWidth < innerHeight ? 80 : 65, innerWidth / innerHeight, 0.1, 300);
+const LOWFX = QUALITY === 'low'; FX.initFx({ low: LOWFX, camera }); if (LOWFX) document.body.classList.add('lowfx');
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 const hemi = new THREE.HemisphereLight(0xfffaf0, 0x8a8070, 1.25); scene.add(hemi);
 const dl2 = new THREE.DirectionalLight(0xdfefff, 0.5); dl2.position.set(-30, 30, -20); scene.add(dl2);
@@ -72,7 +74,7 @@ function addCart(color, name, lane, row, ai, pal) {
   const g = makeCart(color, pal); scene.add(g.root);
   const body = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, shape: new CANNON.Box(new CANNON.Vec3(0.7, 0.7, 1.6)) });
   world.addBody(body);
-  const c = { g, body, name, baseName: name, ai, color, x: 0, z: 0, h: Math.PI / 2, v: 0, idx: 0, lap: 0, finished: false, time: 0,
+  const c = { g, body, name, baseName: name, ai, color, pal, x: 0, z: 0, h: Math.PI / 2, v: 0, idx: 0, lap: 0, finished: false, time: 0,
     maxV: ai ? 17 + Math.random() * 2.5 : 20, offset: lane * 0.6, vd: Math.PI / 2, n2o: 0, gauge: 0, combo: 0, item: null, stuck: 0, prog: 0 };
   g.root.rotation.order = 'YXZ'; carts.push(c); return c;
 }
@@ -143,15 +145,23 @@ function pushOut1(o, r) { // keep a point out of shelf bounds; returns true if i
   return hit;
 }
 const nRiders = c => c.riders && c.riders.length ? c.riders.length : (c.riderN || 0);
-function ridePose(cu, c, seat, n) {
-  const fx = Math.sin(c.h), fz = Math.cos(c.h), side = (seat - (n - 1) / 2) * 0.42, f = 0.55 + (seat === 1 ? -0.3 : 0);
-  cu.holder.position.set(c.x + fx * f + fz * side, 1.15 + hAt(c.x, c.z) + Math.abs(Math.sin(cu.t * 9)) * 0.05 * Math.min(1, Math.abs(c.v) / 8), c.z + fz * f - fx * side);
-  cu.holder.rotation.set(0, c.h + Math.PI + Math.sin(cu.t * 2 + seat) * 0.3, 0); cu.holder.scale.setScalar(0.72); cu.g.walk(Math.sin(cu.t * 3) * 0.6);
+const RIDE_S = 0.8;
+function ridePose(cu, c, seat, n) { // sit in the basket: hips on the basket floor, legs dangling over the front, wobble with the cart
+  const fx = Math.sin(c.h), fz = Math.cos(c.h), back = n > 1 && seat === 1, side = n === 1 || back ? 0 : seat === 0 ? -0.27 : 0.27, f = back ? 0.3 : 0.92;
+  const spd = Math.min(1, Math.abs(c.v) / 16), sc = RIDE_S * (cu.g.scale || 1), bounce = Math.abs(Math.sin(cu.t * 11 + seat * 2)) * 0.06 * spd;
+  cu.holder.position.set(c.x + fx * f + fz * side, hAt(c.x, c.z) + 0.6 + 0.85 * RIDE_S - 0.5 * sc + bounce, c.z + fz * f - fx * side);
+  const acc = (c.v - (cu.lastV ?? c.v)) / Math.max(1e-3, cu.dtLast || 0.016); cu.lastV = c.v; cu.pitch = (cu.pitch || 0) + (Math.max(-0.35, Math.min(0.35, -acc * 0.02)) - (cu.pitch || 0)) * 0.15;
+  cu.holder.rotation.order = 'YXZ';
+  cu.holder.rotation.set(cu.pitch + Math.sin(cu.t * 9 + seat) * 0.04 * spd, c.h + (back ? Math.sin(cu.t * 1.3) * 0.5 : Math.sin(cu.t * 1.7 + seat) * 0.18), -(c.steerIn || 0) * 0.25 * spd + (c.drifting ? (c.driftDir || 0) * 0.3 : 0) + Math.sin(cu.t * 7 + seat) * 0.05 * spd);
+  cu.holder.scale.setScalar(RIDE_S);
+  const mood = c.spin > 0 ? 'dizzy' : c.drifting || Math.abs(c.slip || 0) > 0.45 ? 'shock' : (c.boostT > 0 || c.instT > 0 || Math.abs(c.v) > 14) ? 'happy' : 'normal';
+  cu.g.sit(cu.t, mood, spd); cu.g.face(mood); cu.g.stars(mood === 'dizzy', cu.t);
+  if (mood !== cu.mood) { if (MODE !== 'guest' && Math.random() < 0.35) say(cu, mood === 'happy' ? pick(['와아~ 신난다!', '더 빨리~!', '꺄르르~']) : mood === 'shock' ? pick(['꺄아악!', '떨어진다~!', '으아아~']) : mood === 'dizzy' ? pick(['빙글빙글…', '어지러워~']) : pick(['휴…', '장 보러 왔는데…']), 1.4); cu.mood = mood; }
 }
 function retarget(cu) { delete cu.pi; pickTarget(cu); }
 const insideShelf = (x, z) => strips.some(s => !s.off && x > s.x0 && x < s.x1 && z > s.z0 && z < s.z1);
 for (let k = 0; k < 16; k++) {
-  const g = makePerson(shirt[k % shirt.length], Math.random() < 0.5 ? 0x3949ab : 0x5d4037);
+  const g = makeCustomer();
   const holder = new THREE.Group(); g.root.position.y = -0.85; holder.add(g.root); scene.add(holder);
   const cu = { g, holder, state: 'walk', t: 0, x: 0, z: 0, tx: 0, tz: 0, sp: 1 + Math.random() * 0.8, body: null };
   customers.push(cu);
@@ -159,7 +169,7 @@ for (let k = 0; k < 16; k++) {
 const SCOOP = +(new URLSearchParams(location.search).get('scoop') ?? 0.3), pick0 = 0;
 function scoop(cu, c) {
   c.riders = c.riders || []; cu.state = 'ride'; cu.cart = c; cu.rideT = 0; cu.seat = c.riders.length; c.riders.push(cu); stats.knocked++;
-  cu.holder.scale.setScalar(0.72); cu.g.walk(0);
+  cu.holder.scale.setScalar(RIDE_S); cu.g.walk(0); cu.mood = null;
   say(cu, pick(['어? 여기 어디야?!', '태워줘서 고마워요?!', '으아 빨라!', '내 장 보는 중인데!']), 2.2, true);
   if (c === player) { flash(`손님이 카트에 탔다! 🛒 (${c.riders.length}/3)`); sound.oof(); } puff(cu.x, 1.2, cu.z, 0xffc1e3, 6);
 }
@@ -172,7 +182,8 @@ function hopOut(c, why) {
 }
 function knockCustomer(cu, c) {
   if (Math.random() < SCOOP && (c.riders || []).length < 3) { scoop(cu, c); return; }
-  cu.state = 'down'; cu.t = 0; stats.knocked++; flash('손님을 넘어뜨렸다! 💥'); say(cu, pick(['으악!', '내 장바구니!', '꺄악!', '아야!']), 2, true); puff(cu.x, 1, cu.z, 0xffffff, 8); if (c === player) { shake = 0.6; if (Math.random() < 0.6) say(c, pick(['미안해요~!', '앗 죄송!', '으앗!']), 1.6, true); }
+  cu.state = 'down'; cu.t = 0; stats.knocked++; flash('손님을 넘어뜨렸다! 💥');
+  if (c === player || Math.hypot(cu.x - player.x, cu.z - player.z) < 25) FX.comic(cu.x, 1.6 + hAt(cu.x, cu.z), cu.z, pick(['POW!', '쾅!', '퍽!', 'BAM!']), '#ff5252'); if (c === player) FX.screenFlash('#fff', 0.3); say(cu, pick(['으악!', '내 장바구니!', '꺄악!', '아야!']), 2, true); puff(cu.x, 1, cu.z, 0xffffff, 8); if (c === player) { shake = 0.6; if (Math.random() < 0.6) say(c, pick(['미안해요~!', '앗 죄송!', '으앗!']), 1.6, true); }
   const body = new CANNON.Body({ mass: 60, shape: custShape, linearDamping: 0.2, angularDamping: 0.4 });
   body.position.set(cu.x, 0.9 + hAt(cu.x, cu.z), cu.z);
   const fx = Math.sin(c.h), fz = Math.cos(c.h), s = Math.abs(c.v);
@@ -191,10 +202,10 @@ function shelfCollide(c, dt) {
       c.x = px + nx * CART_R; c.z = pz + nz * CART_R;
       const fx = Math.sin(c.h), fz = Math.cos(c.h); const impact = Math.abs(c.v) * Math.max(0, -(fx * nx + fz * nz) * Math.sign(c.v));
       if (impact > 7 && (c.lastHit || 0) <= 0 && !(s.kind === 'shelf' || s.kind === 'freezer' || s.kind === 'stand')) { // hard non-shelf obstacle: bounce, no spill
-        c.lastHit = 0.4; if (!c.ai) { sound.bump(0.9); shake = Math.min(1, impact / 15); flash(s.kind === 'car' ? '🚨 삐뽀삐뽀! 자동차 경보!' : s.kind === 'door' ? '쾅! 냉동고 문에 부딪혔다 🧊' : s.kind === 'pillar' ? '기둥에 쾅! 💫' : '꽝! 벽에 부딪혔다'); if (s.kind === 'car') sound.honk(); }
+        c.lastHit = 0.4; if (!c.ai) { sound.bump(0.9); shake = Math.min(1, impact / 15); flash(s.kind === 'car' ? '🚨 삐뽀삐뽀! 자동차 경보!' : s.kind === 'counter' ? '계산대에 쾅! 계산원이 놀랐다 😱' : s.kind === 'door' ? '쾅! 냉동고 문에 부딪혔다 🧊' : s.kind === 'pillar' ? '기둥에 쾅! 💫' : '꽝! 벽에 부딪혔다'); if (s.kind === 'car') sound.honk(); }
         if (s.kind === 'door') { s.off = true; s.slam = 2; sound.door(); }
         if (c.riders && c.riders.length) hopOut(c, 'crash'); if (MODE === 'guest' && c === player && nRiders(c)) NET.send({ t: 'crash' });
-        puff(px + nx * 0.6, 1, pz + nz * 0.6, 0xdddddd, 5);
+        puff(px + nx * 0.6, 1, pz + nz * 0.6, 0xdddddd, 5); if (!c.ai) FX.comic(px + nx, 2 + hAt(c.x, c.z), pz + nz, pick(['쿵!', 'BONK!', '꽝!']), '#ffffff');
       }
       else if (impact > 7 && (c.lastHit || 0) <= 0) {
         const n = Math.min(10, Math.floor(impact / 2.2)); stats.spilled += n; c.lastHit = 0.4; if (!c.ai) { sound.clatter(n); sound.bump(0.8); }
@@ -202,6 +213,8 @@ function shelfCollide(c, dt) {
         if (c.riders && c.riders.length) hopOut(c, 'crash');
         if (MODE === 'guest' && c === player && nRiders(c)) NET.send({ t: 'crash' });
         removeShelfItems(px - nx * 0.6, pz - nz * 0.6, n); puff(px + nx * 0.6, 1, pz + nz * 0.6, 0xffe0a0, 6);
+        if (!c.ai || Math.hypot(c.x - player.x, c.z - player.z) < 22) { for (let k = 0; k < (LOWFX ? 1 : 3); k++) puff(px + nx * 0.8, 0.8 + k * 0.5, pz + nz * 0.8, [0xff5252, 0xffeb3b, 0x40c4ff, 0x69f0ae][(Math.random() * 4) | 0], LOWFX ? 3 : 6); FX.comic(px + nx, 2.2 + hAt(c.x, c.z), pz + nz, pick(['와장창!', 'CRASH!', '쾅!', '우르르!']), '#ffeb3b'); }
+        if (!c.ai) FX.screenFlash('#fff', 0.35);
         for (let k = 0; k < n; k++) spawnProduct(px + nx * 0.5 + (Math.random() - .5) * 2.5 * (nz ? 1 : 0), 0.8 + Math.random() * 1.8 + hAt(px + nx, pz + nz),
           pz + nz * 0.5 + (Math.random() - .5) * 2.5 * (nx ? 1 : 0), nx * (2 + Math.random() * 3) + fx * impact * 0.3, 1 + Math.random() * 2, nz * (2 + Math.random() * 3) + fz * impact * 0.3);
       }
@@ -291,7 +304,7 @@ function updateCart(c, dt) {
   shelfCollide(c, dt);
   // progress
   const ni = nearestIdx(c.x, c.z, c.idx - 3, TR.MAP.win || 14);
-  if (c.idx > N - 8 && ni < 8) { c.lap++; if (state === 'race') lapDone(c); if (c.lap >= LAPS && !c.finished) { c.finished = true; c.time = raceT; finishOrder.push(c); if (c === player) { sound.fanfare(); if (MODE === 'solo') endRace(); else mpFinish(); } } else if (!c.ai && c.lap < LAPS) { flash(`랩 ${c.lap + 1}/${LAPS}!`); sound.lap(); } }
+  if (c.idx > N - 8 && ni < 8) { c.lap++; if (state === 'race') { lapDone(c); if (checkout && c.lap >= 1) { checkout.react('cheer', c.lap >= LAPS ? 4 : 1.4); if (c.lap >= LAPS && (c === player || !finishOrder.length)) { const cs = checkout.cashiers[0]; if (cs) say(cs, finishOrder.length ? '수고하셨어요~!' : '축하합니다~! 🎉', 2.2, true); } } paLap(c); } if (c.lap >= LAPS && !c.finished) { c.finished = true; c.time = raceT; finishOrder.push(c); if (c === player) { sound.fanfare(); if (MODE === 'solo') endRace(); else mpFinish(); } } else if (!c.ai && c.lap < LAPS) { flash(`랩 ${c.lap + 1}/${LAPS}!`); sound.lap(); } }
   else if (c.idx < 8 && ni > N - 8) c.lap--;
   c.idx = ni; c.prog = c.finished ? 1e6 - c.time : c.lap * N + c.idx;
 }
@@ -304,6 +317,19 @@ function lapDone(c) {
     if (c === player) { const b = getBest(TR.MAP_ID); if (!b || lt < b) { localStorage.setItem(bestKey(), lt.toFixed(2)); c.newBest = true; setTimeout(() => flash(`🏅 최고 랩 갱신! ${fmt(lt)}`), 900); } } }
   c.lapT0 = raceT;
 }
+// ---------- store PA announcer ----------
+const PA_LINES = { _: ['고객 여러분, 카트는 천천히 밀어 주세요~ (아마도요)', '오늘 계산대 3번 오픈했습니다!', '미아 방지 안내: 카트에 탄 손님은 잠시 후 내려 드립니다', '상품 파손 시 혼돈 지수가 올라갑니다. 열심히 해 주세요?!', '시식 코너에서 만두 드셔 보세요~'],
+  mart: ['라면 대전! 오늘만 1+1 행사 중입니다', '신선 코너 수박이 아주 달아요~'], freezer: ['냉동 코너 바닥이 미끄럽습니다. 주의해 주세요!', '냉동고 문은 꼭 닫아 주세요~', '아이스크림 1+1 행사 중!'],
+  parking: ['주차장 내 서행 바랍니다. 차량 통행 주의!', 'B1 출구는 오른쪽입니다', '카트는 카트 보관소에 반납해 주세요'], skywalk: ['무빙워크에서 뛰지 마세요!', '2층 의류 매장 30% 세일 중!', '에스컬레이터 옆 통로는 지름길이… 아닙니다?'] };
+let paT = 14, paLeader = null, paLeadT = 0, paFinal = false;
+const paSay = t => FX.pa(t, () => sound.pa());
+function paTick(dt) {
+  if (state !== 'race') return; paT -= dt; paLeadT -= dt;
+  if (paT <= 0) { paT = 22 + Math.random() * 14; paSay(pick([...PA_LINES._, ...(PA_LINES[TR.MAP_ID] || [])])); }
+  const act = carts.filter(c => !c.inactive), lead = act.sort((a, b) => b.prog - a.prog)[0];
+  if (lead && lead !== paLeader && raceT > 8 && paLeadT <= 0) { paLeadT = 14; paSay(`현재 1위는 ${lead.name.replace(/[<>&]/g, '')} 고객님입니다!`); } if (lead) paLeader = lead;
+}
+function paLap(c) { if (!paFinal && c.lap === LAPS - 1 && !c.finished) { paFinal = true; paSay('마지막 바퀴입니다! 계산대 앞이 결승선이에요~'); } if (c.lap >= LAPS && finishOrder.length === 0) paSay(`${c.name.replace(/[<>&]/g, '')} 고객님 1등으로 계산 완료~! 축하드립니다!`); }
 function interactions(dt) {
   for (const c of carts) {
     if (c.inactive) continue;
@@ -316,10 +342,10 @@ function interactions(dt) {
         const cx = c.x + fx * 1.2, cz = c.z + fz * 1.2;
         if (Math.hypot(cx - cu.x, cz - cu.z) < 1.0 || Math.hypot(c.x - cu.x, c.z - cu.z) < 1.3) {
           if (Math.abs(c.v) > 9) { knockCustomer(cu, c); c.v *= 0.75; if (!c.ai || Math.hypot(c.x - player.x, c.z - player.z) < 25) sound.oof(); }
-          else { const side = Math.sign((cu.x - c.x) * fz - (cu.z - c.z) * fx) || 1; c.v *= c.ai ? 0.8 : 0.5; cu.x += fz * side * 0.5 + fx * 0.2; cu.z -= fx * side * 0.5 - fz * 0.2; cu.pause = 0; // sidestep instead of being bulldozed along
+          else { const side = Math.sign((cu.x - c.x) * fz - (cu.z - c.z) * fx) || 1; c.v *= c.ai ? 0.8 : 0.5; cu.x += fz * side * 0.5 + fx * 0.2; cu.z -= fx * side * 0.5 - fz * 0.2; cu.pause = 0; cu.shockT = 1; // sidestep instead of being bulldozed along
             if (c === player && (c.bump || 0) <= 0) { flash('앗, 죄송합니다! 🙇'); sound.bump(0.6); c.bump = 1; } }
         }
-        else if (Math.abs(c.v) > 8 && Math.hypot(c.x - cu.x, c.z - cu.z) < 3.2 && Math.random() < 0.05) say(cu, pick(['조심해요!', '어머나!', '천천히 좀!', '위험해요!']), 1.5);
+        else if (Math.abs(c.v) > 8 && Math.hypot(c.x - cu.x, c.z - cu.z) < 3.2 && Math.random() < 0.05) { say(cu, pick(['조심해요!', '어머나!', '천천히 좀!', '위험해요!']), 1.5); cu.shockT = 1; }
       } else if (cu.body) circlePush(c, cu.body.position.x, cu.body.position.z, 1.7, 0.9); // fallen customers block
     }
     c.bump = (c.bump || 0) - dt;
@@ -327,6 +353,17 @@ function interactions(dt) {
   }
 }
 
+function customerFx(dt) {
+  for (const cu of customers) {
+    if (cu.prevSt === 'rise' && cu.state === 'walk') cu.angryT = 4.5;
+    if (cu.prevSt !== cu.state && cu.state === 'ride') cu.mood = null;
+    cu.prevSt = cu.state; cu.angryT = (cu.angryT || 0) - dt; cu.shockT = (cu.shockT || 0) - dt; cu.fxT = (cu.fxT || 0) + dt;
+    if (cu.state === 'ride') continue;
+    if (cu.state === 'down') { cu.g.face('dizzy'); cu.g.stars(!LOWFX || true, cu.fxT); }
+    else if (cu.state === 'rise') { cu.g.face('angry'); cu.g.stars(false); cu.g.pose('fist', cu.fxT); }
+    else { cu.g.face(cu.shockT > 0 ? 'shock' : cu.angryT > 0 ? 'angry' : 'normal'); cu.g.stars(false); }
+  }
+}
 function updateCustomers(dt) {
   for (const cu of customers) {
     cu.t += dt;
@@ -348,22 +385,24 @@ function updateCustomers(dt) {
       cu.holder.position.copy(cu.body.position); cu.holder.quaternion.copy(cu.body.quaternion); cu.g.walk(0);
       if (cu.t > 7) { cu.state = 'rise'; cu.t = 0; cu.q0 = cu.holder.quaternion.clone(); cu.x = cu.body.position.x; cu.z = cu.body.position.z; cu.y0 = cu.body.position.y; world.removeBody(cu.body); cu.body = null; cu.qUp = new THREE.Quaternion(); pushOut(cu, 0.5); say(cu, pick(['아이고 허리야…', '누가 카트를 저렇게 몰아!', '진짜 화나네!', '매니저 불러요!']), 2.5, true); }
     } else if (cu.state === 'rise') {
-      const k = Math.min(1, cu.t / 1.2); cu.holder.quaternion.slerpQuaternions(cu.q0, cu.qUp, k); cu.holder.position.set(cu.x, cu.y0 + (0.85 + hAt(cu.x, cu.z) - cu.y0) * k, cu.z);
-      if (k >= 1) { cu.state = 'walk'; cu.t = 0; pickTarget(cu); }
+      const k = Math.min(1, cu.t / 1.2); cu.holder.quaternion.slerpQuaternions(cu.q0, cu.qUp, k); cu.holder.position.set(cu.x, cu.y0 + (0.85 + hAt(cu.x, cu.z) - cu.y0) * k + Math.sin(k * Math.PI) * 0.35, cu.z);
+      if (k >= 1) { cu.state = 'walk'; cu.t = 0; cu.holder.quaternion.identity(); pickTarget(cu); }
     }
   }
 }
 
 function endRace() {
-  state = 'finished';
-  setTimeout(() => {
+  state = 'finished'; startCut(finishOrder[0] || player);
+  cutDone = () => {
     const rank = finishOrder.indexOf(player) + 1;
     $('finTitle').textContent = rank === 1 ? '🏆 우승!' : `결승! ${rank}위`;
     const rows = finishOrder.map((c, i) => `${i + 1}위 ${c.name} — ${fmt(c.time)}`).join('<br>');
     const best = getBest(TR.MAP_ID);
     $('finBody').innerHTML = `${rows}<br><br>기록: <b>${fmt(player.time)}</b> · 맵: ${TR.MAP.icon} ${TR.MAP.name}<br>🏅 이 맵 최고 랩: <b>${best ? fmt(best) : '-'}</b>${player.newBest ? ' <span class="nb">신기록!</span>' : ''}<br>넘어뜨린 손님: ${stats.knocked}명 · 떨어뜨린 상품: ${stats.spilled}개<br>혼돈 지수: <b>${chaos()}</b>`;
-    $('finish').classList.remove('hidden');
-  }, 1200);
+    $('finish').classList.add('pod'); $('finish').classList.remove('hidden');
+    const rest = carts.filter(c => !c.inactive && !finishOrder.includes(c)).sort((a, b) => b.prog - a.prog);
+    FX.showPodium([...finishOrder, ...rest].map(c => ({ name: c.name, pal: c.pal, color: c.color })), textSprite);
+  };
 }
 const chaos = () => stats.knocked * 100 + stats.spilled * 10;
 const fmt = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, '0')}`;
@@ -436,11 +475,11 @@ function drawMinimap() {
 // ---------- fun systems: drift FX, items, events ----------
 let annT = null;
 function announce(t) { const el = $('event'); el.textContent = '📢 ' + t; el.classList.add('show'); clearTimeout(annT); annT = setTimeout(() => el.classList.remove('show'), 3500); }
-let fun = null, funOwned = null;
+let fun = null, funOwned = null, checkout = null;
 function makeFun() {
   const s0 = new Set(scene.children), b0 = new Set(world.bodies);
   fun = createFun({ scene, world, carts, path, N, strips, customers, sound, get player() { return player; }, textSprite, say, puff, flash, spawnProduct, stats, insideShelf, circlePush, announce, retarget, pushOut,
-    shakeIt: k => { shake = Math.max(shake, k); }, lights: { hemi, dl, dl2 }, extraObs });
+    shakeIt: k => { shake = Math.max(shake, k); }, lights: { hemi, dl, dl2 }, extraObs, comic: FX.comic, screenFlash: FX.screenFlash });
   funOwned = { objs: scene.children.filter(o => !s0.has(o)), bodies: world.bodies.filter(b => !b0.has(b)) };
 }
 function disposeFun() {
@@ -470,7 +509,7 @@ function updateMapFx(dt) {
     const f = ((C.off * N - T * 4.5) % N + N) % N, i0 = Math.floor(f), k = f - i0, lat = TR.MAP.inSign * 6.3;
     const a = atLane(i0, lat), b = atLane(i0 + 1, lat); C.x = a.x + (b.x - a.x) * k; C.z = a.z + (b.z - a.z) * k; C.h = Math.atan2(a.x - b.x, a.z - b.z);
     C.g.position.set(C.x, hAt(C.x, C.z), C.z); C.g.rotation.y = C.h;
-    for (const c of carts) if (!c.inactive && !c.net && circlePush(c, C.x, C.z, 2.7, 0.5) && c === player && (c.carHit || 0) < performance.now()) { c.carHit = performance.now() + 900; sound.honk(); sound.bump(1); shake = 0.7; flash('빵빵! 🚗 차에 부딪혔다!'); if (c.riders && c.riders.length) hopOut(c, 'crash'); }
+    for (const c of carts) if (!c.inactive && !c.net && circlePush(c, C.x, C.z, 2.7, 0.5) && c === player && (c.carHit || 0) < performance.now()) { c.carHit = performance.now() + 900; sound.honk(); sound.bump(1); shake = 0.7; FX.comic(c.x, 2 + hAt(c.x, c.z), c.z, '빵빵! 💥', '#ff9100'); FX.screenFlash('#ffcc80', 0.35); flash('빵빵! 🚗 차에 부딪혔다!'); if (c.riders && c.riders.length) hopOut(c, 'crash'); }
     const dp = Math.hypot(C.x - player.x, C.z - player.z); if (dp < 16 && honkCd <= 0 && state === 'race') { honkCd = 4; sound.honk(); say(C.ent, pick(['빵빵! 비켜요~', '카트는 인도로!', '주차장에서 경주라니!']), 1.6); }
     if (MODE !== 'guest') for (const cu of customers) if (cu.state === 'walk' && Math.hypot(cu.x - C.x, cu.z - C.z) < 2.8) { const a2 = Math.atan2(cu.x - C.x, cu.z - C.z); cu.x = C.x + Math.sin(a2) * 2.8; cu.z = C.z + Math.cos(a2) * 2.8; pushOut(cu, 0.5); if (Math.random() < 0.02) say(cu, pick(['어머, 차다!', '천천히 가요!']), 1.4); } // pedestrians jump aside
   }
@@ -487,6 +526,7 @@ function loadMap(id) {
   seeded(hashStr(id) + 20261016, () => {
     setMap(id); N = path.length; trk = buildWorld(scene, world);
     const T = TR.MAP.theme; scene.background.set(T.bg); scene.fog.color.set(T.fogCol ?? T.bg); scene.fog.near = T.fog[0]; scene.fog.far = T.fog[1]; hemi.intensity = T.hemi; dl.intensity = T.dl; dl2.intensity = T.dl2;
+    if (checkout) checkout.dispose(); checkout = FX.buildCheckout(scene, { path, strips, HW: TR.HW, inSign: TR.MAP.inSign, hAt, textSprite, tangentAt });
     makeFun();
     if (TR.MAP.traffic) for (let k = 0; k < 2; k++) { const g = makeCar([0x1e88e5, 0xeeeeee][k]); traffic.push({ g, off: 0.3 + k * 0.5, x: 0, z: 0, h: 0, ent: { g: { root: g } } }); }
     for (const cu of customers) {
@@ -540,7 +580,24 @@ function startRaceMP(slots, you, mode) {
   player = carts[you]; player.ai = false; player.name = slots[you] ? slots[you].name : '나';
   $('finish').classList.add('hidden'); $('title').classList.add('hidden');
   camPos.set(0, 0, 0); camLook.set(player.x, 1.2 + hAt(player.x, player.z), player.z);
-  state = 'countdown'; cd = 3.99; initAudio();
+  state = 'countdown'; cd = 3.99 + INTRO; introSkip = false; cut = null; paT = 14; paLeader = null; paFinal = false; FX.hidePodium(); $('finish').classList.remove('pod'); showIntro(true); initAudio();
+}
+// ---------- start-line intro sweep (part of the synced countdown; skip = camera only in multiplayer) ----------
+const INTRO = new URLSearchParams(location.search).has('nointro') ? 0 : 4.5; let introSkip = false;
+const introOn = () => state === 'countdown' && cd > 3.99 && !introSkip;
+function showIntro(on) { const el = $('intro'); if (!on) { el.classList.remove('show'); return; } if (!INTRO) return; el.innerHTML = `<div class="it">${TR.MAP.icon} ${TR.MAP.name}</div><div class="id">${TR.MAP.desc}</div><div class="sk">${IS_TOUCH ? '탭' : '아무 키나 누르면'} 건너뛰기 ▶</div>`; el.classList.add('show'); }
+function skipIntro() { if (!introOn()) return; if (MODE === 'solo') cd = 3.99; else { introSkip = true; flash('곧 출발합니다… 준비!'); } showIntro(false); camPos.set(0, 0, 0); }
+addEventListener('keydown', e => { if (introOn() && !e.repeat) skipIntro(); });
+addEventListener('pointerdown', e => { if (introOn() && !e.target.closest?.('#mute,#auto')) skipIntro(); });
+// ---------- finish cutscene: slow-mo (solo), orbit camera around the winner, confetti ----------
+let cut = null;
+function startCut(target) { if (cut) return; cut = { t: 0, target, dur: 4.6 }; FX.confettiFloor(hAt(target.x, target.z)); FX.confetti(scene, target.x, hAt(target.x, target.z) + 4, target.z, 180, 6); $('cutbar').classList.add('show'); sound.fanfare(); }
+function endCut() { if (!cut) return; cut = null; $('cutbar').classList.remove('show'); camPos.set(0, 0, 0); if (cutDone) { const f = cutDone; cutDone = null; f(); } }
+let cutDone = null;
+addEventListener('keydown', e => { if (cut && cut.t > 0.6 && !e.repeat && e.code !== 'ArrowUp') endCut(); });
+addEventListener('pointerdown', e => { if (cut && cut.t > 0.6 && !e.target.closest?.('#mute,#auto,#finish')) endCut(); });
+function podiumFromRows(rows) {
+  return rows.slice(0, 3).map(r => { const c = carts.find(k => k.name === r.name) || carts.find(k => r.name.startsWith(k.baseName)); return { name: r.name, pal: c && c.pal, color: c ? c.color : 0x888888 }; });
 }
 const SOLO_SLOTS = () => carts.map((c, i) => ({ type: i ? 'bot' : 'human', name: c.baseName }));
 function onRemoteState(i, s) { const c = carts[i]; if (c && c.remote) c.rs = s; }
@@ -598,7 +655,7 @@ function guestCustomers(dt) {
     const moved = Math.hypot(h.position.x - ox, h.position.z - oz); cu.t = (cu.t || 0) + moved * 4; cu.g.walk(cu.state === 'walk' && moved > 0.002 ? cu.t : 0);
     cu.x = h.position.x; cu.z = h.position.z; }
 }
-function guestHit() { const p = player; p.spin = 1.1; p.v *= 0.35; p.drifting = false; shake = 0.7; flash('당했다! 🌀'); sound.bump(1); puff(p.x, 0.8, p.z, 0xffffff, 6); }
+function guestHit() { const p = player; p.spin = 1.1; p.v *= 0.35; p.drifting = false; shake = 0.7; flash('당했다! 🌀'); FX.comic(p.x, 2 + hAt(p.x, p.z), p.z, pick(['POW!', '퍽!', '빙글~']), '#ff4081'); FX.screenFlash('#fff', 0.45); sound.bump(1); puff(p.x, 0.8, p.z, 0xffffff, 6); }
 function guestBumps(c) {
   if (c !== player) return;
   // effects the host can't apply to a locally-predicted cart: predicted banana spin, wet signs, fallen customers, VIP/forklift, loose products
@@ -613,7 +670,7 @@ function guestBumps(c) {
 function onSay(m) { const ent = m.k === 'u' ? customers[m.i] : carts[m.i]; if (ent && !ent.inactive) say(ent, m.text, m.dur, true); }
 function netSay(ent, text, dur) { const i = customers.indexOf(ent), j = carts.indexOf(ent); if (i >= 0) NET.broadcast({ t: 'say', k: 'u', i, text, dur }); else if (j >= 0) NET.broadcast({ t: 'say', k: 'c', i: j, text, dur }); }
 function myState() { const c = player; return [r2(c.x), r2(c.z), r2(c.h), r2(c.vd), r2(c.v), c.drifting ? 1 : 0, r2(c.slip || 0), c.lap, c.idx, c.finished ? 1 : 0, r2(c.time), c.steerIn || 0, r2(c.driftT || 0)]; }
-function mpFinish() { flash('🏁 완주! 다른 참가자를 기다리는 중…'); msgT = 6; }
+function mpFinish() { flash('🏁 완주! 다른 참가자를 기다리는 중…'); msgT = 6; startCut(finishOrder[0] && !finishOrder[0].inactive ? finishOrder[0] : player); }
 function mpTick(dt) {
   if (MODE === 'host' && (state === 'countdown' || state === 'race')) {
     netAcc += dt; if (netAcc >= 1 / 15) { netAcc = 0; snapN++; NET.broadcast(makeSnap(snapN % 3 === 0)); }
@@ -635,15 +692,18 @@ function mpTick(dt) {
 function showResults(rows) {
   state = 'finished'; $('finTitle').textContent = '🏁 경주 결과';
   $('finBody').innerHTML = rows.map((r, i) => `${i + 1}위 ${r.name.replace(/[<>&]/g, '')}${r.bot ? ' 🤖' : ''} — ${r.time != null ? fmt(r.time) : '미완주'}`).join('<br>') + '<br><br><i>잠시 후 로비로 돌아갑니다…</i>';
-  $('restart').classList.add('hidden'); $('finish').classList.remove('hidden');
+  $('restart').classList.add('hidden');
+  const show = () => { $('finish').classList.add('pod'); $('finish').classList.remove('hidden'); FX.showPodium(podiumFromRows(rows), textSprite); };
+  if (cut) { cutDone = show; cut.dur = Math.min(cut.dur, cut.t + 1.2); setTimeout(endCut, 1500); } else show();
 }
 function toLobby() {
+  cut = null; cutDone = null; $('cutbar').classList.remove('show'); FX.hidePodium(); showIntro(false); $('finish').classList.remove('pod');
   $('finish').classList.add('hidden'); $('restart').classList.remove('hidden'); fun.reset();
   carts.forEach((c, i) => { const was = c.inactive; resetCart(c, i); c.inactive = was; if (was) { c.x = c.z = 999; } });
   state = 'lobby'; $('countdown').textContent = '';
 }
 function leftRoom() {
-  MODE = 'solo'; fun.reset();
+  MODE = 'solo'; fun.reset(); cut = null; cutDone = null; $('cutbar').classList.remove('show'); FX.hidePodium(); showIntro(false); $('finish').classList.remove('pod');
   carts.forEach((c, i) => { resetCart(c, i); c.g.root.visible = true; c.ai = i > 0; c.name = c.baseName; nameTag(c, null); });
   for (const cu of customers) { cu.nt = null; if (cu.state !== 'walk' || !cu.body) { if (cu.body) { world.removeBody(cu.body); cu.body = null; } cu.state = 'walk'; cu.cart = null; cu.rush = null; cu.holder.scale.setScalar(1); cu.holder.rotation.set(0, 0, 0); cu.x = cu.holder.position.x; cu.z = cu.holder.position.z; cu.holder.position.y = 0.85 + hAt(cu.x, cu.z); pushOut(cu, 0.5); retarget(cu); } }
   player = carts[0]; state = 'lobby'; $('finish').classList.add('hidden'); $('restart').classList.remove('hidden');
@@ -665,16 +725,19 @@ function adapt(now) {
 function frame(now) {
   requestAnimationFrame(frame);
   let dt = Math.min(0.05, (now - last) / 1000); last = now;
-  step(dt); render(dt); adapt(now);
+  if (cut) { cut.t += dt; if (cut.t > cut.dur) endCut(); }
+  const ts = cut && MODE === 'solo' ? (cut.t < 2.6 ? 0.3 : 0.7) : 1;
+  if (!FX.podiumActive()) step(dt * ts); else if (MODE === 'host') step(dt); render(dt); adapt(now);
 }
 // a hidden host tab gets no rAF; keep the room simulated & snapshots flowing (browsers throttle this to ~1Hz)
 setInterval(() => { if (document.hidden && MODE === 'host') { const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now; step(dt); } }, 100);
 function step(dt) {
   if (state === 'title' || state === 'lobby') { $('countdown').textContent = ''; }
   else if (state === 'countdown') {
-    const before = Math.ceil(cd); cd -= dt; const n = Math.ceil(cd); if (n !== before && n > 0) sound.beep();
-    $('countdown').textContent = cd > 0 ? n : '출발!';
-    if (cd <= 0) { state = 'race'; sound.go(); setTimeout(() => { if ($('countdown').textContent === '출발!') $('countdown').textContent = ''; }, 800); }
+    const before = Math.ceil(cd); cd -= dt; const n = Math.ceil(cd); if (n !== before && n > 0 && n <= 3) sound.beep();
+    if (cd <= 3.99) showIntro(false);
+    $('countdown').textContent = cd > 3.99 ? '' : cd > 0 ? n : '출발!'; $('countdown').className = cd <= 3.99 && cd > 0 ? 'n' + n : cd <= 0 ? 'go' : '';
+    if (cd <= 0) { state = 'race'; sound.go(); setTimeout(() => { if (state === 'race') paSay(pick(['고객 여러분, 카트 레이스가 시작됩니다! 안전 운전 부탁드립니다~', '딩동~ 지금부터 마트 카트 레이스를 시작합니다!'])); }, 1200); setTimeout(() => { if ($('countdown').textContent === '출발!') $('countdown').textContent = ''; }, 800); }
   } else if (state === 'race' || state === 'finished') raceT += state === 'race' ? dt : 0;
   if (state === 'finished') for (const c of carts) if (!c.finished) { c.prog = c.lap * N + c.idx; }
   for (const c of carts) updateCart(c, dt);
@@ -682,6 +745,7 @@ function step(dt) {
   fun.update(dt, state, raceT, MODE === 'guest');
   updateMapFx(dt); trk.tick(dt);
   if (MODE === 'guest') guestCustomers(dt); else updateCustomers(dt);
+  for (const cu of customers) cu.dtLast = dt; customerFx(dt); if (checkout) checkout.update(dt, carts); paTick(dt);
   for (const c of carts) { c.body.position.set(c.x, 0.7 + hAt(c.x, c.z), c.z); c.body.quaternion.setFromEuler(0, c.h, 0); c.body.velocity.set(Math.sin(c.vd) * c.v, 0, Math.cos(c.vd) * c.v); }
   const PH = lowPhys ? 1 / 30 : 1 / 60; acc += dt; let n = 0; while (acc >= PH && n < 3) { world.step(PH); acc -= PH; n++; } if (n === 3) acc = 0;
   for (const c of carts) { c.body.position.set(c.x, 0.7 + hAt(c.x, c.z), c.z); }
@@ -704,8 +768,16 @@ function render(dt) {
   camPos.lerp(want, 1 - Math.exp(-dt * 5)); if (camPos.lengthSq() === 0) camPos.copy(want);
   camLook.lerp(new THREE.Vector3(p.x + fx * 4, 1.2 + py, p.z + fz * 4), 1 - Math.exp(-dt * 8));
   camera.position.copy(camPos); camera.lookAt(camLook);
+  if (introOn() && INTRO) { const u = Math.min(1, 1 - (cd - 3.99) / INTRO), B = TR.MAP.bounds, cx = (B.x0 + B.x1) / 2, cz = (B.z0 + B.z1) / 2, Rr = Math.max(B.x1 - B.x0, B.z1 - B.z0) * 0.62;
+    const a = -Math.PI * 0.5 + u * Math.PI * 1.1, o = new THREE.Vector3(cx + Math.cos(a) * Rr, 34 - u * 14, cz + Math.sin(a) * Rr), look = new THREE.Vector3(cx, 0, cz);
+    const b = u < 0.72 ? 0 : (u - 0.72) / 0.28, e = b * b * (3 - 2 * b); camera.position.lerpVectors(o, want, e); camera.lookAt(look.lerp(camLook, e)); camPos.copy(want); }
+  if (cut) { const T = cut.target, ty = hAt(T.x, T.z), a = cut.t * 0.9 + T.h + Math.PI * 0.6, r = 5.5 - Math.min(1.5, cut.t * 0.4);
+    camera.position.set(T.x + Math.sin(a) * r, ty + 2.2 + Math.sin(cut.t * 0.8) * 0.5, T.z + Math.cos(a) * r); camera.lookAt(T.x, ty + 1.1, T.z);
+    if (Math.random() < dt * 2.5) FX.confetti(scene, T.x, ty + 5, T.z, 40, 7); }
   if (shake > 0) { shake = Math.max(0, shake - dt * 2); camera.position.x += (Math.random() - .5) * shake; camera.position.y += (Math.random() - .5) * shake * 0.6; }
-  camera.fov = (innerWidth < innerHeight ? 80 : 65) + Math.max(0, p.v - 18) * 0.8; camera.updateProjectionMatrix();
+  camera.fov = (innerWidth < innerHeight ? 80 : 65) + Math.max(0, p.v - 18) * 0.8 + ((p.boostT > 0 || p.instT > 0) && state === 'race' ? 6 : 0); camera.updateProjectionMatrix();
+  FX.setSpeedLines(state === 'race' && !cut && (p.boostT > 0 || p.instT > 0) ? Math.min(1, 0.55 + Math.abs(p.v) / 40) : 0);
+  FX.updateComic(dt); FX.updateConfetti(dt);
   // HUD
   const active = carts.filter(c => !c.inactive), sorted = [...active].sort((a, b) => b.prog - a.prog);
   $('time').textContent = fmt(state === 'finished' ? p.time : raceT);
@@ -719,9 +791,8 @@ function render(dt) {
   $('riders').textContent = nRiders(p) ? `🛒 탑승 손님 ${'🧍'.repeat(nRiders(p))} (-${nRiders(p) * 12}% 속도)` : '';
   $('driftTxt').className = p.drifting ? 'on' : '';
   $('chaos').textContent = chaos(); $('knocked').textContent = stats.knocked; $('spilled').textContent = stats.spilled;
-  renderer.render(scene, camera);
+  if (FX.podiumActive()) FX.renderPodium(renderer, dt); else renderer.render(scene, camera);
 }
-loadMap(new URLSearchParams(location.search).get('map') || localStorage.getItem('cartMap') || 'mart');
-camLook.set(player.x + 4, 1.2, player.z);
-requestAnimationFrame(frame);
-window.__game = { get perf() { return { fps: Math.round(fps), pr, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, quality: QUALITY }; }, debugNearFinish() { const p = player, q = path[N - 4], [tx, tz] = tangentAt(N - 4); p.x = q.x; p.z = q.y; p.idx = N - 4; p.lap = LAPS - 1; p.h = p.vd = Math.atan2(tx, tz); p.v = 10; }, loadMap, get MAP() { return TR.MAP_ID; }, get N() { return N; }, path, strips, traffic, get trk() { return trk; }, hAt, getBest, get MODE() { return MODE; }, NET, get player() { return player; }, get raceT() { return raceT; }, knock: (i, c) => knockCustomer(customers[i], c || player), startGame, hopOut, fun, insideShelf, get autoAccel() { return autoAccel; }, carts, customers, products, stats, keys, get state() { return state; } };
+const boot = () => { loadMap(new URLSearchParams(location.search).get('map') || localStorage.getItem('cartMap') || 'mart'); camLook.set(player.x + 4, 1.2, player.z); requestAnimationFrame(frame); };
+Promise.race([document.fonts ? document.fonts.load('64px Jua') : Promise.resolve(), new Promise(r => setTimeout(r, 1500))]).catch(() => {}).then(boot);
+window.__game = { get perf() { return { fps: Math.round(fps), pr, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, quality: QUALITY }; }, debugNearFinish() { const p = player, q = path[N - 4], [tx, tz] = tangentAt(N - 4); p.x = q.x; p.z = q.y; p.idx = N - 4; p.lap = LAPS - 1; p.h = p.vd = Math.atan2(tx, tz); p.v = 10; }, loadMap, get MAP() { return TR.MAP_ID; }, get N() { return N; }, path, strips, traffic, get trk() { return trk; }, hAt, getBest, get MODE() { return MODE; }, NET, get player() { return player; }, get raceT() { return raceT; }, knock: (i, c) => knockCustomer(customers[i], c || player), startGame, hopOut, get fun() { return fun; }, insideShelf, get autoAccel() { return autoAccel; }, carts, customers, products, stats, keys, get state() { return state; }, get cut() { return cut; }, get cd() { return cd; }, skipIntro, get podium() { return FX.podiumActive(); }, get checkout() { return checkout; } };

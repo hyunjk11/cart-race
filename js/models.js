@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 const lm = c => new THREE.MeshLambertMaterial({ color: c });
 const skin = lm(0xf1c27d);
 
@@ -92,11 +93,107 @@ export function makeChibi(pal) {
     const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.16, 4, 8), toon(pal.pants || 0x5c6bc0)); leg.position.y = -0.16; lp.add(leg);
     const shoe = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), toon(pal.hat)); shoe.scale.set(1, 0.6, 1.4); shoe.position.set(0, -0.32, 0.04); lp.add(shoe); legs.push(lp);
   }
-  return { root, walk(ph, k = 1) {
+  return { root, cheer(t, k = 1) { const j = Math.abs(Math.sin(t * 8)); bob.position.y = j * 0.25 * k; arms.forEach((a, i) => { a.rotation.x = -2.9 + Math.sin(t * 10 + i) * 0.3 * k; }); legs.forEach(l => l.rotation.x = 0); headG.rotation.z = Math.sin(t * 4) * 0.12; },
+    walk(ph, k = 1) {
     legs[0].rotation.x = Math.sin(ph) * 0.8 * k; legs[1].rotation.x = -Math.sin(ph) * 0.8 * k;
     const b = Math.abs(Math.sin(ph)); bob.position.y = b * 0.12 * k;
     bob.scale.set(1 + (1 - b) * 0.06 * k, 1 - (1 - b) * 0.06 * k, 1);
     headG.rotation.z = Math.sin(ph) * 0.08 * k; headG.rotation.x = 0.1;
     arms.forEach(a => a.rotation.x = -1.25 + Math.sin(ph * 2) * 0.05 * k);
   } };
+}
+
+// ---------- customer / cashier chibis (few draw calls: vertex-colored merged parts + face atlas) ----------
+const vcMat = new THREE.MeshToonMaterial({ vertexColors: true });
+const _c = new THREE.Color();
+function part(g, col, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1, rx = 0, ry = 0, rz = 0) {
+  g = g.index ? g : g; g.scale(sx, sy, sz); g.rotateX(rx); g.rotateY(ry); g.rotateZ(rz); g.translate(x, y, z);
+  _c.setHex(col); const n = g.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) { a[i * 3] = _c.r; a[i * 3 + 1] = _c.g; a[i * 3 + 2] = _c.b; } g.setAttribute('color', new THREE.BufferAttribute(a, 3));
+  for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(k)) g.deleteAttribute(k);
+  return g;
+}
+const merge = parts => { const m = mergeGeometries(parts.map(p => p.index ? p.toNonIndexed() : p), false); parts.forEach(p => p.dispose()); return m; };
+// expression atlas: 0 normal, 1 happy, 2 dizzy, 3 angry, 4 shock
+export const FACE = { normal: 0, happy: 1, dizzy: 2, angry: 3, shock: 4 };
+let faceTex = null;
+function getFaceTex() {
+  if (faceTex) return faceTex;
+  const S = 128, c = document.createElement('canvas'); c.width = S * 5; c.height = S; const g = c.getContext('2d');
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  for (let f = 0; f < 5; f++) {
+    const ox = f * S, ex = [ox + 40, ox + 88], ey = 56;
+    g.fillStyle = 'rgba(255,120,150,0.55)'; for (const x of [ox + 22, ox + 106]) { g.beginPath(); g.ellipse(x, 80, 13, 8, 0, 0, 7); g.fill(); }
+    g.strokeStyle = g.fillStyle = '#2a1a22'; g.lineWidth = 6;
+    if (f === 0) { for (const x of ex) { g.beginPath(); g.ellipse(x, ey, 8, 11, 0, 0, 7); g.fill(); g.fillStyle = '#fff'; g.beginPath(); g.arc(x + 3, ey - 4, 3, 0, 7); g.fill(); g.fillStyle = '#2a1a22'; } g.beginPath(); g.arc(ox + 64, 76, 10, 0.2, Math.PI - 0.2); g.stroke(); }
+    if (f === 1) { for (const x of ex) { g.beginPath(); g.arc(x, ey + 4, 10, Math.PI + 0.3, -0.3); g.stroke(); } g.fillStyle = '#c2185b'; g.beginPath(); g.arc(ox + 64, 74, 14, 0, Math.PI); g.fill(); }
+    if (f === 2) { for (const x of ex) { g.beginPath(); for (let a = 0; a < 12; a += 0.3) { const r = a * 1.1; g.lineTo(x + Math.cos(a) * r, ey + Math.sin(a) * r); } g.lineWidth = 3.5; g.stroke(); } g.lineWidth = 5; g.beginPath(); for (let k = 0; k <= 4; k++) g.lineTo(ox + 48 + k * 8, 86 + (k % 2 ? -5 : 5)); g.stroke(); }
+    if (f === 3) { for (const [x, s] of [[ex[0], 1], [ex[1], -1]]) { g.beginPath(); g.moveTo(x - 13 * s, ey - 20); g.lineTo(x + 9 * s, ey - 10); g.stroke(); g.beginPath(); g.arc(x, ey + 2, 6, 0, 7); g.fill(); } g.beginPath(); g.arc(ox + 64, 92, 11, Math.PI + 0.3, -0.3); g.stroke();
+      g.strokeStyle = '#e53935'; g.lineWidth = 5; const mx = ox + 108, my = 22; for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { g.beginPath(); g.moveTo(mx + a * 4, my + b * 4); g.lineTo(mx + a * 12, my + b * 4); g.moveTo(mx + a * 4, my + b * 4); g.lineTo(mx + a * 4, my + b * 12); g.stroke(); } }
+    if (f === 4) { for (const x of ex) { g.fillStyle = '#fff'; g.beginPath(); g.arc(x, ey, 13, 0, 7); g.fill(); g.lineWidth = 3; g.strokeStyle = '#2a1a22'; g.stroke(); g.fillStyle = '#2a1a22'; g.beginPath(); g.arc(x, ey, 5, 0, 7); g.fill(); } g.beginPath(); g.ellipse(ox + 64, 88, 9, 12, 0, 0, 7); g.fill(); }
+  }
+  faceTex = new THREE.CanvasTexture(c); faceTex.colorSpace = THREE.SRGBColorSpace; faceTex.repeat.set(0.2, 1); return faceTex;
+}
+const faceG = new THREE.PlaneGeometry(0.5, 0.5), starMat = new THREE.MeshBasicMaterial({ color: 0xffeb3b });
+const starG = (() => { const parts = []; for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2; parts.push(part(new THREE.OctahedronGeometry(0.07, 0), 0xffffff, Math.cos(a) * 0.32, 0, Math.sin(a) * 0.32, 1, 1, 0.5)); } return merge(parts); })();
+const HAIRC = [0x3e2723, 0x5d4037, 0x212121, 0x8d6e63, 0xd7a35c, 0xb71c1c], SHIRTC = [0xef5350, 0x42a5f5, 0x66bb6a, 0xffa726, 0xab47bc, 0x26c6da, 0xf48fb1, 0xfff176, 0x8d6e63, 0x7986cb];
+const SKINC = [0xffe0c8, 0xf6cfae, 0xe8b894, 0xd29c74];
+export function makeCustomer(opt = {}) {
+  const R = Math.random, pick = a => a[(R() * a.length) | 0];
+  const age = opt.age || (R() < 0.22 ? 'kid' : R() < 0.25 ? 'grand' : 'adult');
+  const skinC = pick(SKINC), hairC = age === 'grand' ? pick([0xbdbdbd, 0xe0e0e0, 0x9e9e9e]) : pick(HAIRC), shirtC = opt.shirt || pick(SHIRTC), pantsC = pick([0x3949ab, 0x5d4037, 0x37474f, 0x6d4c41, 0x1e88e5]);
+  const style = opt.style || pick(age === 'grand' ? ['bun', 'short', 'cap'] : ['short', 'bun', 'pig', 'cap', 'long', 'spiky']);
+  const skirt = !opt.uniform && R() < 0.35, basket = opt.basket ?? (!opt.uniform && age !== 'kid' && R() < 0.45);
+  const root = new THREE.Group(), bob = new THREE.Group(); root.add(bob);
+  // body (+ skirt / apron)
+  const bp = [part(new THREE.CapsuleGeometry(0.24, 0.26, 4, 10), shirtC, 0, 0.8, 0), part(new THREE.SphereGeometry(0.17, 10, 8), opt.uniform ? 0xffffff : shirtC, 0, 0.76, 0.12, 1, 1, 0.6)];
+  if (skirt) bp.push(part(new THREE.ConeGeometry(0.34, 0.36, 12, 1, true), pick([0xf06292, 0x9575cd, 0x4db6ac, 0xffb74d]), 0, 0.56, 0));
+  if (opt.uniform) bp.push(part(new THREE.BoxGeometry(0.4, 0.5, 0.04), opt.uniform, 0, 0.72, 0.24), part(new THREE.BoxGeometry(0.16, 0.06, 0.02), 0xffffff, 0.08, 0.86, 0.27));
+  if (age === 'grand') bp.push(part(new THREE.CapsuleGeometry(0.25, 0.12, 4, 10), 0xa1887f, 0, 0.92, -0.02, 1.05, 1, 1.05)); // cardigan
+  const body = new THREE.Mesh(merge(bp), vcMat); bob.add(body);
+  // head + hair
+  const headG = new THREE.Group(); headG.position.y = 1.3; bob.add(headG);
+  const hp = [part(new THREE.SphereGeometry(0.36, 18, 14), skinC, 0, 0, 0, 1.05, 0.95, 1)];
+  const hemi = (c, y = 0.03, sc = 1) => part(new THREE.SphereGeometry(0.38 * sc, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), c, 0, y, -0.02, 1.05, 1, 1, -0.3);
+  if (style === 'short') hp.push(hemi(hairC));
+  if (style === 'bun') hp.push(hemi(hairC), part(new THREE.SphereGeometry(0.15, 10, 8), hairC, 0, 0.36, -0.12));
+  if (style === 'pig') hp.push(hemi(hairC), part(new THREE.SphereGeometry(0.13, 10, 8), hairC, -0.36, -0.05, -0.05, 1, 1.4, 1), part(new THREE.SphereGeometry(0.13, 10, 8), hairC, 0.36, -0.05, -0.05, 1, 1.4, 1));
+  if (style === 'long') hp.push(hemi(hairC), part(new THREE.BoxGeometry(0.62, 0.5, 0.2), hairC, 0, -0.18, -0.24));
+  if (style === 'spiky') { hp.push(hemi(hairC)); for (let k = 0; k < 5; k++) hp.push(part(new THREE.ConeGeometry(0.08, 0.2, 6), hairC, (k - 2) * 0.12, 0.34, -0.05, 1, 1, 1, -0.3, 0, (k - 2) * 0.25)); }
+  if (style === 'cap' || opt.uniform) { const cc = opt.uniform || pick([0xe53935, 0x1e88e5, 0xfdd835, 0x43a047]); hp.push(hemi(hairC, 0, 0.97), part(new THREE.SphereGeometry(0.385, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.38), cc, 0, 0.06, 0), part(new THREE.CylinderGeometry(0.2, 0.2, 0.03, 12), cc, 0, 0.16, 0.34, 1.2, 1, 1, 0.25)); }
+  if (age === 'grand') hp.push(part(new THREE.TorusGeometry(0.075, 0.012, 6, 14), 0x5d4037, -0.13, 0.0, 0.36), part(new THREE.TorusGeometry(0.075, 0.012, 6, 14), 0x5d4037, 0.13, 0.0, 0.36));
+  const head = new THREE.Mesh(merge(hp), vcMat); headG.add(head);
+  const fm = new THREE.MeshBasicMaterial({ map: getFaceTex().clone(), transparent: true, depthWrite: false }); fm.map.needsUpdate = true;
+  const face = new THREE.Mesh(faceG, fm); face.position.set(0, -0.02, 0.352); headG.add(face);
+  const stars = new THREE.Mesh(starG, starMat); stars.position.y = 0.5; stars.visible = false; headG.add(stars);
+  // arms (left may carry a basket) and legs
+  const arms = [], legs = [];
+  for (const s of [-1, 1]) {
+    const ap = new THREE.Group(); ap.position.set(s * 0.27, 1.0, 0); bob.add(ap);
+    const ag = [part(new THREE.CapsuleGeometry(0.065, 0.26, 4, 8), shirtC, 0, -0.2, 0), part(new THREE.SphereGeometry(0.075, 8, 6), skinC, 0, -0.4, 0)];
+    if (basket && s < 0) ag.push(part(new THREE.BoxGeometry(0.34, 0.2, 0.24), 0xd32f2f, -0.02, -0.56, 0.06), part(new THREE.TorusGeometry(0.12, 0.015, 4, 12, Math.PI), 0xb71c1c, -0.02, -0.46, 0.06), part(new THREE.BoxGeometry(0.1, 0.12, 0.08), pick([0xffeb3b, 0x81c784, 0xfff]), 0.04, -0.42, 0.06));
+    ap.add(new THREE.Mesh(merge(ag), vcMat)); arms.push(ap);
+    const lp = new THREE.Group(); lp.position.set(s * 0.12, 0.5, 0); root.add(lp);
+    lp.add(new THREE.Mesh(merge([part(new THREE.CapsuleGeometry(0.075, 0.26, 4, 8), skirt ? skinC : pantsC, 0, -0.22, 0), part(new THREE.SphereGeometry(0.09, 8, 6), pick([0x212121, 0xffffff, 0xe53935, 0x795548]), 0, -0.44, 0.04, 1, 0.6, 1.4)]), vcMat)); legs.push(lp);
+  }
+  const sc = age === 'kid' ? 0.72 : age === 'grand' ? 0.92 : 1; root.scale.setScalar(sc);
+  if (age === 'grand') { bob.rotation.x = 0.12; headG.position.z = 0.06; }
+  let curFace = -1;
+  const api = { root, age, scale: sc, basket,
+    face(name) { const f = FACE[name] ?? 0; if (f !== curFace) { curFace = f; fm.map.offset.x = f * 0.2; } },
+    stars(on, t) { stars.visible = on; if (on) stars.rotation.y = t * 5; },
+    walk(ph, k = 1) { legs[0].rotation.x = Math.sin(ph) * 0.6; legs[1].rotation.x = -Math.sin(ph) * 0.6; arms[0].rotation.set(basket ? -0.15 : -Math.sin(ph) * 0.5, 0, 0); arms[1].rotation.set(Math.sin(ph) * 0.5, 0, 0);
+      bob.position.y = Math.abs(Math.sin(ph)) * 0.04 * k; headG.rotation.z = Math.sin(ph) * 0.05; },
+    // seated in a cart basket: legs forward & dangling, arms by mood
+    sit(t, mood, k) { const kick = Math.sin(t * 7) * 0.35 * (0.3 + k); legs[0].rotation.x = -1.35 + kick; legs[1].rotation.x = -1.35 - kick; bob.position.y = 0;
+      if (mood === 'happy') { arms[0].rotation.set(-2.7 + Math.sin(t * 12) * 0.3, 0, -0.3); arms[1].rotation.set(-2.7 - Math.sin(t * 12) * 0.3, 0, 0.3); }
+      else if (mood === 'shock') { arms[0].rotation.set(-1.6, 0, -0.9); arms[1].rotation.set(-1.6, 0, 0.9); }
+      else { arms[0].rotation.set(-0.9, 0, -0.5); arms[1].rotation.set(-0.9, 0, 0.5); }
+      headG.rotation.z = Math.sin(t * 3) * 0.12; },
+    pose(kind, t) { // cashier / podium poses
+      if (kind === 'cheer') { const j = Math.abs(Math.sin(t * 9)); bob.position.y = j * 0.18; arms[0].rotation.set(-2.8 + j * 0.4, 0, -0.3); arms[1].rotation.set(-2.8 + j * 0.4, 0, 0.3); legs[0].rotation.x = legs[1].rotation.x = 0; }
+      else if (kind === 'shock') { bob.position.y = 0.05; arms[0].rotation.set(-2.2, 0, -0.6); arms[1].rotation.set(-2.2, 0, 0.6); }
+      else if (kind === 'fist') { arms[0].rotation.set(-2.6 + Math.sin(t * 14) * 0.5, 0, -0.2); arms[1].rotation.set(0, 0, 0.2); }
+      else { bob.position.y = 0; arms[0].rotation.set(-0.5, 0, 0); arms[1].rotation.set(-0.5, 0, 0); legs[0].rotation.x = legs[1].rotation.x = 0; headG.rotation.z = Math.sin(t * 2) * 0.06; } },
+  };
+  return api;
 }

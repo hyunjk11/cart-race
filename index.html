@@ -2,6 +2,8 @@
 <html lang="ko"><head><meta charset="utf-8"><title>마트 카트 레이싱</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap">
 <link rel="stylesheet" href="style.css">
 <script type="importmap">{"imports":{
  "three":"https://unpkg.com/three@0.160.0/build/three.module.js",
@@ -13,7 +15,8 @@
  <div id="hudR"><div>💥 혼돈 지수 <b id="chaos">0</b></div><div>🧍 넘어뜨린 손님 <b id="knocked">0</b></div><div>🥫 떨어뜨린 상품 <b id="spilled">0</b></div></div>
  <div id="hudB"><div id="speed">0 km/h</div><div id="driftTxt"></div><div id="n2o"></div><div id="boostBar"><div id="boostFill"></div></div><div class="small">드리프트 게이지</div><div id="itemSlot"></div><div id="riders"></div></div>
 </div>
-<div id="countdown"></div>
+<div id="speedlines"></div><div id="flash"></div><div id="fx"></div><div id="cutbar"><i></i><i></i></div>
+<div id="countdown"></div><div id="intro"></div><div id="pa"></div>
 <div id="msg"></div><div id="event"></div>
 <div id="help">조작: ↑/W 가속 · ↓/S 브레이크·후진 · ←→/A D 조향 · Shift+방향 드리프트 · 스페이스 N2O · E/Ctrl 아이템 · M 소리 · T 자동가속 · R 다시 시작</div>
 <button id="mute" title="소리 켜기/끄기 (M)">🔊</button>
@@ -28,7 +31,7 @@
  <div class="logo">🛒💨</div><h1>마트 카트 레이싱</h1><p class="sub">드리프트로 N2O를 모으고, 아이템으로 라이벌을 막고, 마트를 혼돈에 빠뜨려라!</p>
  <div class="mapsel"><div class="mlabel">🗺️ 맵 선택</div><div id="mapRow" class="maprow"></div><div id="mapDesc" class="note"></div></div>
  <div class="tbtns"><button id="startBtn">🏁 혼자 하기</button><button id="mpBtn">🌐 멀티플레이</button></div>
- <div class="qrow">화질 <select id="quality"><option value="auto">자동</option><option value="low">낮음 (저사양/모바일)</option><option value="high">높음</option></select></div>
+ <div class="qrow">화질 <select id="quality"><option value="auto">자동</option><option value="low">낮음 (저사양 · 효과 줄임)</option><option value="high">높음</option></select></div>
  <div class="ctl desk">⌨️ ↑/W 가속 · ↓/S 브레이크 · ←→ 조향 · <b>Shift+방향 드리프트</b> · 스페이스 N2O · E 아이템 · T 자동가속 · M 소리</div>
  <div class="ctl mob">📱 자동 가속 · 왼쪽 D-패드: ◀▶ 조향, ▼ 브레이크(▼+방향 = 드리프트), ▲ 힘껏 밀기 · 오른쪽: 드리프트 / 부스트 / 아이템</div>
 </div></div>

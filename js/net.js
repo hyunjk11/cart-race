@@ -96,7 +96,7 @@ function startRace() {
   for (const [pid, c] of NET.conns) if (c.open) c.send(JSON.stringify({ t: 'start', slots, you: slotOf(pid), map: NET.map }));
   hideMP(); api.startRace(slots, 0, 'host');
 }
-export function hostResults(rows) { NET.broadcast({ t: 'results', rows }); api.showResults(rows); setTimeout(backToLobby, 8000); }
+export function hostResults(rows) { NET.broadcast({ t: 'results', rows }); api.showResults(rows); setTimeout(backToLobby, 10000); }
 function backToLobby() { NET.inRace = false; NET.slots.forEach(s => { if (s && s.type === 'human' && s.id !== 'host') s.ready = false; }); NET.broadcast({ t: 'tolobby' }); api.toLobby(); showLobby(); pushLobby(); }
 
 // ---------------- GUEST ----------------

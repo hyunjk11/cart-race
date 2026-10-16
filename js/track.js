@@ -122,7 +122,7 @@ export function setMap(id) {
 
 export function textSprite(text, bg) {
   const c = document.createElement('canvas'); c.width = 512; c.height = 128; const g = c.getContext('2d');
-  g.fillStyle = bg; g.fillRect(0, 0, 512, 128); g.fillStyle = '#fff'; g.font = 'bold 64px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 256, 68, 490);
+  g.fillStyle = bg; if (g.roundRect) { g.beginPath(); g.roundRect(4, 4, 504, 120, 34); g.fill(); g.lineWidth = 6; g.strokeStyle = 'rgba(255,255,255,.85)'; g.stroke(); } else g.fillRect(0, 0, 512, 128); g.fillStyle = '#fff'; g.font = "64px Jua, 'Malgun Gothic', sans-serif"; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 8; g.strokeStyle = 'rgba(0,0,0,.28)'; g.strokeText(text, 256, 70, 470); g.fillText(text, 256, 70, 470);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   return new THREE.Sprite(new THREE.SpriteMaterial({ map: t }));
 }
