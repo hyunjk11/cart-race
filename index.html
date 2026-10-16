@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8"><title>마트 카트 레이싱</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
 <link rel="stylesheet" href="style.css">
 <script type="importmap">{"imports":{
  "three":"https://unpkg.com/three@0.160.0/build/three.module.js",
@@ -13,7 +14,12 @@
 </div>
 <div id="countdown"></div>
 <div id="msg"></div>
-<div id="help">조작: ↑/W 가속 · ↓/S 브레이크·후진 · ←→/A D 조향 · 스페이스 부스트 · R 다시 시작</div>
+<div id="help">조작: ↑/W 가속 · ↓/S 브레이크·후진 · ←→/A D 조향 · 스페이스 부스트 · M 소리 · R 다시 시작</div>
+<button id="mute" title="소리 켜기/끄기 (M)">🔊</button>
+<div id="touch">
+ <div class="tl"><button data-key="ArrowLeft">◀</button><button data-key="ArrowRight">▶</button></div>
+ <div class="tr"><button data-key="Space" class="boost">부스트</button><button data-key="ArrowDown" class="brake">브레이크</button><button data-key="ArrowUp" class="gas">가속</button></div>
+</div>
 <div id="finish" class="hidden"><div class="panel"><h1 id="finTitle">결승!</h1><div id="finBody"></div><button id="restart">다시 시작</button></div></div>
 <script type="module" src="js/main.js"></script>
 </body></html>

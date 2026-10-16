@@ -2,13 +2,15 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { HX, HZ, HW, LAPS, buildPath, shelfStrips, buildWorld } from './track.js';
 import { makeCart, makePerson } from './models.js';
+import { initAudio, sound, setEngine, setMuted, isMuted, onMuteChange } from './audio.js';
 
 const $ = id => document.getElementById(id);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); renderer.setSize(innerWidth, innerHeight);
+const MOBILE = matchMedia('(pointer: coarse)').matches || Math.min(innerWidth, innerHeight) < 600;
+renderer.setPixelRatio(Math.min(devicePixelRatio, MOBILE ? 1 : 1.5)); renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0xbfd4e6); scene.fog = new THREE.Fog(0xbfd4e6, 40, 110);
-const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 300);
+const camera = new THREE.PerspectiveCamera(innerWidth < innerHeight ? 80 : 65, innerWidth / innerHeight, 0.1, 300);
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 scene.add(new THREE.HemisphereLight(0xffffff, 0x887766, 1.1));
 const dl = new THREE.DirectionalLight(0xffffff, 1.2); dl.position.set(20, 40, 10); scene.add(dl);
@@ -26,6 +28,19 @@ const keys = {};
 addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'KeyR') location.reload(); if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault(); });
 addEventListener('keyup', e => { keys[e.code] = false; });
 $('restart').onclick = () => location.reload();
+const unlock = () => initAudio();
+['pointerdown', 'keydown', 'touchstart'].forEach(ev => addEventListener(ev, unlock, { passive: true }));
+const muteBtn = $('mute'); const showMute = m => muteBtn.textContent = m ? '🔇' : '🔊'; showMute(isMuted()); onMuteChange(showMute);
+muteBtn.addEventListener('pointerdown', e => { e.stopPropagation(); initAudio(); setMuted(!isMuted()); });
+addEventListener('keydown', e => { if (e.code === 'KeyM' && !e.repeat) setMuted(!isMuted()); });
+const IS_TOUCH = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+if (IS_TOUCH) document.body.classList.add('touch');
+document.querySelectorAll('#touch [data-key]').forEach(b => {
+  const k = b.dataset.key, on = e => { e.preventDefault(); keys[k] = true; b.classList.add('on'); }, off = e => { e.preventDefault(); keys[k] = false; b.classList.remove('on'); };
+  b.addEventListener('pointerdown', e => { b.setPointerCapture?.(e.pointerId); on(e); });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => b.addEventListener(ev, off));
+});
+['touchmove', 'gesturestart', 'dblclick'].forEach(ev => document.addEventListener(ev, e => { if (!e.target.closest?.('button')) e.preventDefault(); }, { passive: false }));
 
 // ---------- stats ----------
 const stats = { knocked: 0, spilled: 0 };
@@ -34,8 +49,8 @@ let msgT = 0; function flash(t) { $('msg').textContent = t; msgT = 1.5; }
 // ---------- carts ----------
 const CART_R = 1.3;
 const carts = [];
-function addCart(color, name, lane, row, ai) {
-  const g = makeCart(color, ai ? 0x37474f : 0x1565c0); scene.add(g.root);
+function addCart(color, name, lane, row, ai, pal) {
+  const g = makeCart(color, pal); scene.add(g.root);
   const body = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, shape: new CANNON.Box(new CANNON.Vec3(0.7, 0.7, 1.6)) });
   world.addBody(body);
   const c = { g, body, name, ai, x: -4 - row * 5, z: -HZ + lane, h: Math.PI / 2, v: 0, idx: 0, lap: 0, finished: false, time: 0,
@@ -47,10 +62,10 @@ function nearestIdx(x, z, from, span) {
   for (let k = 0; k < span; k++) { const i = (from + k + N) % N; const d = (path[i].x - x) ** 2 + (path[i].y - z) ** 2; if (d < bd) { bd = d; bi = i; } }
   return bi;
 }
-const player = addCart(0xd32f2f, '나', -2.5, 0, false);
-addCart(0x2e7d32, '초록 카트', 2.5, 0, true);
-addCart(0xf9a825, '노랑 카트', -2.5, 1, true);
-addCart(0x6a1b9a, '보라 카트', 2.5, 1, true);
+const player = addCart(0xff4f8b, '나', -2.5, 0, false, { shirt: 0xffd54f, hat: 0xff4f8b, hair: 0x6d3b1f, pants: 0x4fc3f7 });
+addCart(0x43d17a, '초록 카트', 2.5, 0, true, { shirt: 0xb2ff59, hat: 0x2ecc71, hair: 0x3b2b20, pants: 0x8d6e63 });
+addCart(0xffc107, '노랑 카트', -2.5, 1, true, { shirt: 0xff8a65, hat: 0xffc107, hair: 0xf4d03f, pants: 0x7e57c2 });
+addCart(0x9c5cff, '보라 카트', 2.5, 1, true, { shirt: 0x80deea, hat: 0x9c5cff, hair: 0x222244, pants: 0xf06292 });
 
 // ---------- products (physics pool) ----------
 const MAXP = 140, products = [];
@@ -109,7 +124,7 @@ function shelfCollide(c, dt) {
       c.x = px + nx * CART_R; c.z = pz + nz * CART_R;
       const fx = Math.sin(c.h), fz = Math.cos(c.h); const impact = Math.abs(c.v) * Math.max(0, -(fx * nx + fz * nz) * Math.sign(c.v));
       if (impact > 7 && (c.lastHit || 0) <= 0) {
-        const n = Math.min(10, Math.floor(impact / 2.2)); stats.spilled += n; c.lastHit = 0.4;
+        const n = Math.min(10, Math.floor(impact / 2.2)); stats.spilled += n; c.lastHit = 0.4; if (!c.ai) { sound.clatter(n); sound.bump(0.8); }
         if (!c.ai) flash('선반 충돌! 상품이 쏟아졌다 🥫');
         for (let k = 0; k < n; k++) spawnProduct(px + nx * 0.5 + (Math.random() - .5) * 2.5 * (nz ? 1 : 0), 0.8 + Math.random() * 1.8,
           pz + nz * 0.5 + (Math.random() - .5) * 2.5 * (nx ? 1 : 0), nx * (2 + Math.random() * 3) + fx * impact * 0.3, 1 + Math.random() * 2, nz * (2 + Math.random() * 3) + fz * impact * 0.3);
@@ -149,6 +164,7 @@ function updateCart(c, dt) {
     if (c.boost > 0.6 && Math.abs(da) < 0.1 && Math.random() < 0.01) c.boostT = 1;
     if (c.boostT > 0) { c.boostT -= dt; boosting = true; }
   }
+  if (!c.ai) { if (boosting && !c.wasBoost) sound.whoosh(); c.wasBoost = boosting; setEngine(c.v, boosting); }
   const maxV = c.maxV * (boosting ? 1.45 : 1);
   if (boosting) c.boost = Math.max(0, c.boost - dt * 0.5); else c.boost = Math.min(1, c.boost + dt * 0.08);
   if (thr > 0) c.v += (boosting ? 22 : 12) * dt * (1 - Math.max(0, c.v) / maxV);
@@ -160,7 +176,7 @@ function updateCart(c, dt) {
   shelfCollide(c, dt);
   // progress
   const ni = nearestIdx(c.x, c.z, c.idx - 3, 14);
-  if (c.idx > N - 8 && ni < 8) { c.lap++; if (c.lap >= LAPS && !c.finished) { c.finished = true; c.time = raceT; finishOrder.push(c); if (!c.ai) endRace(); } else if (!c.ai && c.lap < LAPS) flash(`랩 ${c.lap + 1}/${LAPS}!`); }
+  if (c.idx > N - 8 && ni < 8) { c.lap++; if (c.lap >= LAPS && !c.finished) { c.finished = true; c.time = raceT; finishOrder.push(c); if (!c.ai) { sound.fanfare(); endRace(); } } else if (!c.ai && c.lap < LAPS) { flash(`랩 ${c.lap + 1}/${LAPS}!`); sound.lap(); } }
   else if (c.idx < 8 && ni > N - 8) c.lap--;
   c.idx = ni; c.prog = c.finished ? 1e6 - c.time : c.lap * N + c.idx;
 }
@@ -168,13 +184,14 @@ function updateCart(c, dt) {
 function interactions(dt) {
   for (const c of carts) {
     const fx = Math.sin(c.h), fz = Math.cos(c.h);
-    for (const o of carts) if (o !== c) circlePush(c, o.x, o.z, CART_R * 1.8, 0.985);
+    for (const o of carts) if (o !== c && circlePush(c, o.x, o.z, CART_R * 1.8, 0.985) && !c.ai && (c.cbump || 0) <= 0) { sound.bump(0.7); c.cbump = 0.5; }
+    c.cbump = (c.cbump || 0) - dt;
     for (const cu of customers) {
       if (cu.state === 'walk') {
         const cx = c.x + fx * 1.2, cz = c.z + fz * 1.2;
         if (Math.hypot(cx - cu.x, cz - cu.z) < 1.0 || Math.hypot(c.x - cu.x, c.z - cu.z) < 1.3) {
-          if (Math.abs(c.v) > 9) { knockCustomer(cu, c); c.v *= 0.75; }
-          else { c.v *= 0.5; cu.x += fx * 0.6; cu.z += fz * 0.6; if (!c.ai && (c.bump || 0) <= 0) { flash('앗, 죄송합니다! 🙇'); c.bump = 1; } }
+          if (Math.abs(c.v) > 9) { knockCustomer(cu, c); c.v *= 0.75; if (!c.ai || Math.hypot(c.x - player.x, c.z - player.z) < 25) sound.oof(); }
+          else { c.v *= 0.5; cu.x += fx * 0.6; cu.z += fz * 0.6; if (!c.ai && (c.bump || 0) <= 0) { flash('앗, 죄송합니다! 🙇'); sound.bump(0.6); c.bump = 1; } }
         }
       } else if (cu.body) circlePush(c, cu.body.position.x, cu.body.position.z, 1.7, 0.9); // fallen customers block
     }
@@ -224,9 +241,9 @@ function frame(now) {
 }
 function step(dt) {
   if (state === 'countdown') {
-    cd -= dt; const n = Math.ceil(cd);
+    const before = Math.ceil(cd); cd -= dt; const n = Math.ceil(cd); if (n !== before && n > 0) sound.beep();
     $('countdown').textContent = cd > 0 ? n : '출발!';
-    if (cd <= 0) { state = 'race'; setTimeout(() => { if ($('countdown').textContent === '출발!') $('countdown').textContent = ''; }, 800); }
+    if (cd <= 0) { state = 'race'; sound.go(); setTimeout(() => { if ($('countdown').textContent === '출발!') $('countdown').textContent = ''; }, 800); }
   } else if (state === 'race' || state === 'finished') raceT += state === 'race' ? dt : 0;
   if (state === 'finished') for (const c of carts) if (!c.finished) { c.prog = c.lap * N + c.idx; }
   for (const c of carts) updateCart(c, dt);
@@ -248,7 +265,7 @@ function render(dt) {
   camPos.lerp(want, 1 - Math.exp(-dt * 5)); if (camPos.lengthSq() === 0) camPos.copy(want);
   camLook.lerp(new THREE.Vector3(p.x + fx * 4, 1.2, p.z + fz * 4), 1 - Math.exp(-dt * 8));
   camera.position.copy(camPos); camera.lookAt(camLook);
-  camera.fov = 65 + Math.max(0, p.v - 18) * 0.8; camera.updateProjectionMatrix();
+  camera.fov = (innerWidth < innerHeight ? 80 : 65) + Math.max(0, p.v - 18) * 0.8; camera.updateProjectionMatrix();
   // HUD
   const sorted = [...carts].sort((a, b) => b.prog - a.prog);
   $('time').textContent = fmt(state === 'finished' ? p.time : raceT);
