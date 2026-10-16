@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { HX, HZ, HW, LAPS, buildPath, shelfStrips, buildWorld, textSprite } from './track.js';
+import * as TR from './track.js';
+import { LAPS, MAPS, MAP_IDS, setMap, buildWorld, textSprite, path, strips, hAt, zoneAt, inRect, atLane, tangentAt } from './track.js';
 import { createFun, ITEMS } from './fun.js';
-import { initNet, NET, hostResults } from './net.js';
+import { initNet, NET, hostResults, pushLobby } from './net.js';
 import { makeCart, makePerson } from './models.js';
 import { initAudio, suspendAudio, sound, setEngine, setDrift, setMuted, isMuted, onMuteChange } from './audio.js';
 
@@ -24,14 +25,14 @@ const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -20, 0) });
 world.allowSleep = true; world.broadphase = new CANNON.SAPBroadphase(world);
 world.defaultContactMaterial.friction = 0.4; world.defaultContactMaterial.restitution = 0.2;
 
-const path = buildPath(), N = path.length;
-const strips = shelfStrips();
+let N = 0, trk = null; // current map: path/strips live in track.js (mutated in place on map change)
+const seeded = (seed, f) => { const r = Math.random; let a = seed | 0; Math.random = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; try { return f(); } finally { Math.random = r; } };
+const hashStr = t => { let h = 7; for (const ch of t) h = Math.imul(h, 31) + ch.charCodeAt(0) | 0; return h; };
 // shared seed: every client builds an identical store (shelves, products, displays)
 const _rand = Math.random; { let a = 20261016; Math.random = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-const shelf = buildWorld(scene, world, strips);
 const _m4 = new THREE.Matrix4().makeScale(0, 0, 0);
 function removeShelfItems(x, z, n) { // hide products near impact
-  let removed = 0; for (let i = 0; i < shelf.items.length && removed < n; i++) { if (shelf.hidden[i]) continue; const it = shelf.items[i]; if (Math.abs(it[0] - x) < 1.6 && Math.abs(it[2] - z) < 1.6) { shelf.hidden[i] = 1; const im = shelf.meshes[it[3]]; im.setMatrixAt(it[4], _m4); im.instanceMatrix.needsUpdate = true; removed++; } }
+  let removed = 0; for (let i = 0; i < trk.items.length && removed < n; i++) { if (trk.hidden[i]) continue; const it = trk.items[i]; if (Math.abs(it[0] - x) < 1.6 && Math.abs(it[2] - z) < 1.6) { trk.hidden[i] = 1; const im = trk.meshes[it[3]]; im.setMatrixAt(it[4], _m4); im.instanceMatrix.needsUpdate = true; removed++; } }
   return removed; }
 
 // ---------- input ----------
@@ -71,9 +72,9 @@ function addCart(color, name, lane, row, ai, pal) {
   const g = makeCart(color, pal); scene.add(g.root);
   const body = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, shape: new CANNON.Box(new CANNON.Vec3(0.7, 0.7, 1.6)) });
   world.addBody(body);
-  const c = { g, body, name, baseName: name, ai, color, x: -4 - row * 5, z: -HZ + lane, h: Math.PI / 2, v: 0, idx: 0, lap: 0, finished: false, time: 0,
+  const c = { g, body, name, baseName: name, ai, color, x: 0, z: 0, h: Math.PI / 2, v: 0, idx: 0, lap: 0, finished: false, time: 0,
     maxV: ai ? 17 + Math.random() * 2.5 : 20, offset: lane * 0.6, vd: Math.PI / 2, n2o: 0, gauge: 0, combo: 0, item: null, stuck: 0, prog: 0 };
-  c.idx = nearestIdx(c.x, c.z, 0, N); c.lap = c.idx > N / 2 ? -1 : 0; carts.push(c); return c;
+  g.root.rotation.order = 'YXZ'; carts.push(c); return c;
 }
 function nearestIdx(x, z, from, span) {
   let bi = from, bd = 1e9;
@@ -98,13 +99,17 @@ const PKINDS = [ // spillable product kinds
   { g: new THREE.CylinderGeometry(0.16, 0.16, 0.28, 10), m: new THREE.MeshLambertMaterial({ color: 0xffffff }), s: () => new CANNON.Cylinder(0.16, 0.16, 0.28, 8), mass: 0.15 },
   { g: new THREE.BoxGeometry(0.5, 0.16, 0.3), m: new THREE.MeshLambertMaterial({ color: 0xd7ccc8 }), s: () => new CANNON.Box(new CANNON.Vec3(0.25, 0.08, 0.15)), mass: 0.3 },
   { g: new THREE.BoxGeometry(0.38, 0.6, 0.16), s: () => new CANNON.Box(new CANNON.Vec3(0.19, 0.3, 0.08)), mass: 0.3 },
+  { g: new THREE.CylinderGeometry(0.22, 0.17, 0.26, 12), m: new THREE.MeshLambertMaterial({ color: 0xf8bbd0 }), s: () => new CANNON.Cylinder(0.22, 0.17, 0.26, 8), mass: 0.4 }, // ice cream tub
+  { g: new THREE.BoxGeometry(0.5, 0.08, 0.45), m: new THREE.MeshLambertMaterial({ color: 0xe53935 }), s: () => new CANNON.Box(new CANNON.Vec3(0.25, 0.04, 0.225)), mass: 0.3 }, // frozen pizza
+  { g: new THREE.BoxGeometry(0.42, 0.5, 0.22), m: new THREE.MeshLambertMaterial({ color: 0xb3e5fc, transparent: true, opacity: 0.85 }), s: () => new CANNON.Box(new CANNON.Vec3(0.21, 0.25, 0.11)), mass: 0.8 }, // ice bag
+  { g: new THREE.BoxGeometry(0.12, 0.42, 0.06), s: () => new CANNON.Box(new CANNON.Vec3(0.06, 0.21, 0.03)), mass: 0.1 }, // popsicle
 ];
 function spawnProduct(x, y, z, vx, vy, vz) {
   if (MODE === 'guest') { NET.send({ t: 'spawn', a: [x, y, z, vx, vy, vz].map(r2) }); return; }
   let p;
   if (products.length >= MAXP) { p = products.shift(); }
   else {
-    const K = PKINDS[(Math.random() * PKINDS.length) | 0];
+    const SP = TR.MAP.spill, K = PKINDS[SP[(Math.random() * SP.length) | 0]];
     const mesh = new THREE.Mesh(K.g, K.m || pMats[(Math.random() * pMats.length) | 0]); scene.add(mesh);
     const body = new CANNON.Body({ mass: K.mass, shape: K.s(), linearDamping: K.ld ?? 0.3, angularDamping: K.ld ?? 0.3, sleepSpeedLimit: 0.3 });
     world.addBody(body); p = { mesh, body, k: PKINDS.indexOf(K) };
@@ -119,8 +124,8 @@ const shirt = [0xef5350, 0x42a5f5, 0x66bb6a, 0xffa726, 0xab47bc, 0x26c6da, 0x8d6
 const customers = [];
 const custShape = new CANNON.Box(new CANNON.Vec3(0.3, 0.85, 0.2));
 function pickTarget(cu) { // walk along the aisle (path index), never across the inner shelf block
-  if (cu.pi === undefined) { cu.pi = nearestIdx(cu.x, cu.z, 0, N); cu.dir = Math.random() < 0.5 ? 1 : -1; cu.lane = (Math.random() * 2 - 1) * (HW - 1.5); }
-  if (Math.random() < 0.15) cu.dir = -cu.dir; if (Math.random() < 0.3) cu.lane = (Math.random() * 2 - 1) * (HW - 1.5);
+  if (cu.pi === undefined) { cu.pi = nearestIdx(cu.x, cu.z, 0, N); cu.dir = Math.random() < 0.5 ? 1 : -1; cu.lane = (Math.random() * 2 - 1) * (TR.HW - 1.5); }
+  if (Math.random() < 0.15) cu.dir = -cu.dir; if (Math.random() < 0.3) cu.lane = (Math.random() * 2 - 1) * (TR.HW - 1.5);
   cu.pi = (cu.pi + cu.dir * 2 + N) % N; const p = path[cu.pi], q = path[(cu.pi + 1) % N];
   const tx = q.x - p.x, tz = q.y - p.y, l = Math.hypot(tx, tz) || 1;
   cu.tx = p.x - tz / l * cu.lane; cu.tz = p.y + tx / l * cu.lane;
@@ -129,7 +134,7 @@ function pickTarget(cu) { // walk along the aisle (path index), never across the
 function pushOut(o, r) { let any = false; for (let k = 0; k < 3; k++) { if (!pushOut1(o, r)) break; any = true; } return any; }
 function pushOut1(o, r) { // keep a point out of shelf bounds; returns true if it was inside
   let hit = false;
-  for (const s of strips) {
+  for (const s of strips) { if (s.off) continue;
     if (o.x > s.x0 && o.x < s.x1 && o.z > s.z0 && o.z < s.z1) { // center inside: exit through nearest face
       const pen = [[o.x - s.x0, -1, 0], [s.x1 - o.x, 1, 0], [o.z - s.z0, 0, -1], [s.z1 - o.z, 0, 1]].sort((a, b) => a[0] - b[0])[0];
       o.x += pen[1] * (pen[0] + r); o.z += pen[2] * (pen[0] + r); hit = true; }
@@ -140,17 +145,15 @@ function pushOut1(o, r) { // keep a point out of shelf bounds; returns true if i
 const nRiders = c => c.riders && c.riders.length ? c.riders.length : (c.riderN || 0);
 function ridePose(cu, c, seat, n) {
   const fx = Math.sin(c.h), fz = Math.cos(c.h), side = (seat - (n - 1) / 2) * 0.42, f = 0.55 + (seat === 1 ? -0.3 : 0);
-  cu.holder.position.set(c.x + fx * f + fz * side, 1.15 + Math.abs(Math.sin(cu.t * 9)) * 0.05 * Math.min(1, Math.abs(c.v) / 8), c.z + fz * f - fx * side);
+  cu.holder.position.set(c.x + fx * f + fz * side, 1.15 + hAt(c.x, c.z) + Math.abs(Math.sin(cu.t * 9)) * 0.05 * Math.min(1, Math.abs(c.v) / 8), c.z + fz * f - fx * side);
   cu.holder.rotation.set(0, c.h + Math.PI + Math.sin(cu.t * 2 + seat) * 0.3, 0); cu.holder.scale.setScalar(0.72); cu.g.walk(Math.sin(cu.t * 3) * 0.6);
 }
 function retarget(cu) { delete cu.pi; pickTarget(cu); }
-const insideShelf = (x, z) => strips.some(s => x > s.x0 && x < s.x1 && z > s.z0 && z < s.z1);
+const insideShelf = (x, z) => strips.some(s => !s.off && x > s.x0 && x < s.x1 && z > s.z0 && z < s.z1);
 for (let k = 0; k < 16; k++) {
   const g = makePerson(shirt[k % shirt.length], Math.random() < 0.5 ? 0x3949ab : 0x5d4037);
   const holder = new THREE.Group(); g.root.position.y = -0.85; holder.add(g.root); scene.add(holder);
   const cu = { g, holder, state: 'walk', t: 0, x: 0, z: 0, tx: 0, tz: 0, sp: 1 + Math.random() * 0.8, body: null };
-  let i = (Math.random() * N) | 0; if (i < 12 || i > N - 4) i = (i + 20) % N; // keep start area clear
-  cu.x = path[i].x + (Math.random() * 2 - 1) * 4; cu.z = path[i].y + (Math.random() * 2 - 1) * 4; pushOut(cu, 0.5); pickTarget(cu);
   customers.push(cu);
 }
 const SCOOP = +(new URLSearchParams(location.search).get('scoop') ?? 0.3), pick0 = 0;
@@ -171,7 +174,7 @@ function knockCustomer(cu, c) {
   if (Math.random() < SCOOP && (c.riders || []).length < 3) { scoop(cu, c); return; }
   cu.state = 'down'; cu.t = 0; stats.knocked++; flash('손님을 넘어뜨렸다! 💥'); say(cu, pick(['으악!', '내 장바구니!', '꺄악!', '아야!']), 2, true); puff(cu.x, 1, cu.z, 0xffffff, 8); if (c === player) { shake = 0.6; if (Math.random() < 0.6) say(c, pick(['미안해요~!', '앗 죄송!', '으앗!']), 1.6, true); }
   const body = new CANNON.Body({ mass: 60, shape: custShape, linearDamping: 0.2, angularDamping: 0.4 });
-  body.position.set(cu.x, 0.9, cu.z);
+  body.position.set(cu.x, 0.9 + hAt(cu.x, cu.z), cu.z);
   const fx = Math.sin(c.h), fz = Math.cos(c.h), s = Math.abs(c.v);
   body.velocity.set(fx * s * 0.6, 3 + s * 0.15, fz * s * 0.6);
   body.angularVelocity.set(fz * 6, Math.random() * 2 - 1, -fx * 6);
@@ -180,20 +183,26 @@ function knockCustomer(cu, c) {
 
 // ---------- collisions vs shelves ----------
 function shelfCollide(c, dt) {
-  for (const s of strips) {
+  for (const s of strips) { if (s.off) continue;
     const px = Math.max(s.x0, Math.min(c.x, s.x1)), pz = Math.max(s.z0, Math.min(c.z, s.z1));
     const dx = c.x - px, dz = c.z - pz, d = Math.hypot(dx, dz);
     if (d < CART_R) {
       const nx = d > 1e-4 ? dx / d : s.nx, nz = d > 1e-4 ? dz / d : s.nz;
       c.x = px + nx * CART_R; c.z = pz + nz * CART_R;
       const fx = Math.sin(c.h), fz = Math.cos(c.h); const impact = Math.abs(c.v) * Math.max(0, -(fx * nx + fz * nz) * Math.sign(c.v));
-      if (impact > 7 && (c.lastHit || 0) <= 0) {
+      if (impact > 7 && (c.lastHit || 0) <= 0 && !(s.kind === 'shelf' || s.kind === 'freezer' || s.kind === 'stand')) { // hard non-shelf obstacle: bounce, no spill
+        c.lastHit = 0.4; if (!c.ai) { sound.bump(0.9); shake = Math.min(1, impact / 15); flash(s.kind === 'car' ? '🚨 삐뽀삐뽀! 자동차 경보!' : s.kind === 'door' ? '쾅! 냉동고 문에 부딪혔다 🧊' : s.kind === 'pillar' ? '기둥에 쾅! 💫' : '꽝! 벽에 부딪혔다'); if (s.kind === 'car') sound.honk(); }
+        if (s.kind === 'door') { s.off = true; s.slam = 2; sound.door(); }
+        if (c.riders && c.riders.length) hopOut(c, 'crash'); if (MODE === 'guest' && c === player && nRiders(c)) NET.send({ t: 'crash' });
+        puff(px + nx * 0.6, 1, pz + nz * 0.6, 0xdddddd, 5);
+      }
+      else if (impact > 7 && (c.lastHit || 0) <= 0) {
         const n = Math.min(10, Math.floor(impact / 2.2)); stats.spilled += n; c.lastHit = 0.4; if (!c.ai) { sound.clatter(n); sound.bump(0.8); }
         if (!c.ai) { flash('선반 충돌! 상품이 쏟아졌다 🥫'); shake = Math.min(1, impact / 15); say(c, pick(['으앗!', '내 카트!', '이크!']), 1.4); } else if (Math.random() < 0.5) say(c, pick(['비켜비켜!', '이런!', '으악 선반!']), 1.4);
         if (c.riders && c.riders.length) hopOut(c, 'crash');
         if (MODE === 'guest' && c === player && nRiders(c)) NET.send({ t: 'crash' });
         removeShelfItems(px - nx * 0.6, pz - nz * 0.6, n); puff(px + nx * 0.6, 1, pz + nz * 0.6, 0xffe0a0, 6);
-        for (let k = 0; k < n; k++) spawnProduct(px + nx * 0.5 + (Math.random() - .5) * 2.5 * (nz ? 1 : 0), 0.8 + Math.random() * 1.8,
+        for (let k = 0; k < n; k++) spawnProduct(px + nx * 0.5 + (Math.random() - .5) * 2.5 * (nz ? 1 : 0), 0.8 + Math.random() * 1.8 + hAt(px + nx, pz + nz),
           pz + nz * 0.5 + (Math.random() - .5) * 2.5 * (nx ? 1 : 0), nx * (2 + Math.random() * 3) + fx * impact * 0.3, 1 + Math.random() * 2, nz * (2 + Math.random() * 3) + fz * impact * 0.3);
       }
       c.v *= impact > 3 ? 0.55 : 0.97;
@@ -233,7 +242,7 @@ function updateCart(c, dt) {
     for (const o of fun.obstacles) { const rx = o.x - c.x, rz = o.z - c.z, ahead = rx * fx + rz * fz; if (ahead > 0 && ahead < 12) { const side = rx * fz - rz * fx, R = o.r + 1.2; if (Math.abs(side) < R) off += (side > 0 ? 1 : -1) * (R - Math.abs(side)) * 1.2; } }
     for (const cu of customers) { const ox = cu.body ? cu.body.position.x : cu.x, oz = cu.body ? cu.body.position.z : cu.z, rx = ox - c.x, rz = oz - c.z, ahead = rx * fx + rz * fz;
       if (ahead > 0 && ahead < 10) { const side = rx * fz - rz * fx; if (Math.abs(side) < 2.2) { off += (side > 0 ? 1 : -1) * (2.5 - Math.abs(side)) * 1.4; if (!cu.body && ahead < 5 && Math.random() < 0.02) say(c, pick(['비켜비켜!', '길 좀 비켜주세요!', '실례합니다~!']), 1.3); } } }
-    off = Math.max(-HW + 1.6, Math.min(HW - 1.6, off));
+    off = Math.max(-TR.HW + 1.6, Math.min(TR.HW - 1.6, off));
     const gx = tgt.x - tz / l * off, gz = tgt.y + tx / l * off;
     const want = Math.atan2(gx - c.x, gz - c.z), da = ang(want - c.h);
     steer = Math.max(-1, Math.min(1, da * 2.5)); thr = Math.abs(da) > 0.6 && c.v > 10 ? 0.2 : 1;
@@ -256,7 +265,16 @@ function updateCart(c, dt) {
     if ((counter || upHit || aiHit) && c.driftT > 0.3) { c.instWin = 0; c.instT = 0.7; c.v += 3.5; c.instCount = (c.instCount || 0) + 1; if (!c.ai) { flash('⚡ 순간 부스트!'); sound.whoosh(); } } }
   c.comboT = (c.comboT || 0) - dt; if (c.comboT <= 0) c.combo = 0;
   c.steerIn = steer;
-  const maxV = c.maxV * (boosting ? 1.45 : 1) * (c.push && autoAccel ? 1.1 : 1) * (c.magnetT > 0 ? 1.15 : 1) * (1 - 0.12 * nRiders(c));
+  let maxV = c.maxV * (boosting ? 1.45 : 1) * (c.push && autoAccel ? 1.1 : 1) * (c.magnetT > 0 ? 1.15 : 1) * (1 - 0.12 * nRiders(c));
+  const zn = zoneAt(c.x, c.z); c.bumpT = (c.bumpT || 0) - dt;
+  if (zn) {
+    if (zn.t === 'ice') c.slipT = Math.max(c.slipT || 0, 0.3);
+    else if (zn.t === 'walk') { const dot = Math.sin(c.vd) * zn.dx + Math.cos(c.vd) * zn.dz; if (dot > 0.5) { maxV *= 1.35; c.v += 6 * dt; c.beltT = (c.beltT || 0) + dt; } else if (dot < -0.5) c.v -= 6 * dt * Math.sign(c.v || 1); }
+    else if (zn.t === 'esc') maxV *= 0.9;
+    else if (zn.t === 'bump' && Math.abs(c.v) > 7 && c.bumpT <= 0) { c.bumpT = 0.7; c.v *= 0.72; c.bumps = (c.bumps || 0) + 1; if (!c.ai) { sound.bump(1); shake = Math.max(shake, 0.5); flash('덜컹! 과속방지턱 🚧'); } if (Math.abs(c.v) > 10 && c.riders && c.riders.length) hopOut(c, 'crash'); }
+    if (!c.ai && zn !== c.lastZone && state === 'race') { if (zn.t === 'ice') flash('❄ 빙판! 미끄러워요'); else if (zn.t === 'walk') flash('⏩ 무빙워크! 같은 방향이면 가속'); else if (zn.t === 'esc') flash('🛗 에스컬레이터 옆 지름길!'); }
+  }
+  c.lastZone = zn;
   if (thr > 0) c.v += (boosting ? 22 : 12) * (1 - 0.12 * nRiders(c)) * dt * (1 - Math.max(0, c.v) / maxV);
   else if (thr < 0) c.v -= (c.v > 0 ? 30 : 8) * dt;
   c.v -= c.v * 0.6 * dt; if (c.v < -6) c.v = -6;
@@ -272,12 +290,20 @@ function updateCart(c, dt) {
   c.x += Math.sin(c.vd) * c.v * dt; c.z += Math.cos(c.vd) * c.v * dt;
   shelfCollide(c, dt);
   // progress
-  const ni = nearestIdx(c.x, c.z, c.idx - 3, 14);
-  if (c.idx > N - 8 && ni < 8) { c.lap++; if (c.lap >= LAPS && !c.finished) { c.finished = true; c.time = raceT; finishOrder.push(c); if (c === player) { sound.fanfare(); if (MODE === 'solo') endRace(); else mpFinish(); } } else if (!c.ai && c.lap < LAPS) { flash(`랩 ${c.lap + 1}/${LAPS}!`); sound.lap(); } }
+  const ni = nearestIdx(c.x, c.z, c.idx - 3, TR.MAP.win || 14);
+  if (c.idx > N - 8 && ni < 8) { c.lap++; if (state === 'race') lapDone(c); if (c.lap >= LAPS && !c.finished) { c.finished = true; c.time = raceT; finishOrder.push(c); if (c === player) { sound.fanfare(); if (MODE === 'solo') endRace(); else mpFinish(); } } else if (!c.ai && c.lap < LAPS) { flash(`랩 ${c.lap + 1}/${LAPS}!`); sound.lap(); } }
   else if (c.idx < 8 && ni > N - 8) c.lap--;
   c.idx = ni; c.prog = c.finished ? 1e6 - c.time : c.lap * N + c.idx;
 }
 
+// per-map best lap (localStorage)
+const bestKey = () => 'cartBest_' + TR.MAP_ID, getBest = id => +localStorage.getItem('cartBest_' + id) || 0;
+function lapDone(c) {
+  if (c.finished || c.lap <= (c.lapMax ?? -9)) return; c.lapMax = c.lap;
+  if (c.lap >= 1 && c.lapT0 != null) { const lt = raceT - c.lapT0; c.laps = (c.laps || []).concat(lt);
+    if (c === player) { const b = getBest(TR.MAP_ID); if (!b || lt < b) { localStorage.setItem(bestKey(), lt.toFixed(2)); c.newBest = true; setTimeout(() => flash(`🏅 최고 랩 갱신! ${fmt(lt)}`), 900); } } }
+  c.lapT0 = raceT;
+}
 function interactions(dt) {
   for (const c of carts) {
     if (c.inactive) continue;
@@ -290,13 +316,14 @@ function interactions(dt) {
         const cx = c.x + fx * 1.2, cz = c.z + fz * 1.2;
         if (Math.hypot(cx - cu.x, cz - cu.z) < 1.0 || Math.hypot(c.x - cu.x, c.z - cu.z) < 1.3) {
           if (Math.abs(c.v) > 9) { knockCustomer(cu, c); c.v *= 0.75; if (!c.ai || Math.hypot(c.x - player.x, c.z - player.z) < 25) sound.oof(); }
-          else { c.v *= 0.5; cu.x += fx * 0.6; cu.z += fz * 0.6; if (c === player && (c.bump || 0) <= 0) { flash('앗, 죄송합니다! 🙇'); sound.bump(0.6); c.bump = 1; } }
+          else { const side = Math.sign((cu.x - c.x) * fz - (cu.z - c.z) * fx) || 1; c.v *= c.ai ? 0.8 : 0.5; cu.x += fz * side * 0.5 + fx * 0.2; cu.z -= fx * side * 0.5 - fz * 0.2; cu.pause = 0; // sidestep instead of being bulldozed along
+            if (c === player && (c.bump || 0) <= 0) { flash('앗, 죄송합니다! 🙇'); sound.bump(0.6); c.bump = 1; } }
         }
         else if (Math.abs(c.v) > 8 && Math.hypot(c.x - cu.x, c.z - cu.z) < 3.2 && Math.random() < 0.05) say(cu, pick(['조심해요!', '어머나!', '천천히 좀!', '위험해요!']), 1.5);
       } else if (cu.body) circlePush(c, cu.body.position.x, cu.body.position.z, 1.7, 0.9); // fallen customers block
     }
     c.bump = (c.bump || 0) - dt;
-    for (const p of products) { const b = p.body.position; if (b.y < 0.6 && Math.abs(b.x - c.x) < 1.4 && Math.abs(b.z - c.z) < 1.4) c.v *= 0.993; }
+    for (const p of products) { const b = p.body.position; if (b.y - hAt(b.x, b.z) < 0.6 && Math.abs(b.x - c.x) < 1.4 && Math.abs(b.z - c.z) < 1.4) c.v *= 0.993; }
   }
 }
 
@@ -311,7 +338,7 @@ function updateCustomers(dt) {
       else { cu.x += dx / d * cu.sp * dt; cu.z += dz / d * cu.sp * dt; cu.holder.rotation.set(0, Math.atan2(dx, dz), 0); }
       if (pushOut(cu, 0.5) && !cu.rush) pickTarget(cu);
       if (Math.random() < dt * 0.05) chatter(cu);
-      cu.holder.position.set(cu.x, 0.85, cu.z); cu.g.walk(cu.pause > 0 ? 0 : cu.t * cu.sp * 6);
+      cu.holder.position.set(cu.x, 0.85 + hAt(cu.x, cu.z), cu.z); cu.g.walk(cu.pause > 0 ? 0 : cu.t * cu.sp * 6);
     } else if (cu.state === 'ride') {
       const c = cu.cart; ridePose(cu, c, cu.seat, c.riders.length);
       cu.rideT += dt; if (cu.rideT > 4 && Math.random() < dt * 0.15) say(cu, pick(['언제 내려줘요?', '와 신난다~', '계산대는 저쪽이에요!']), 1.6);
@@ -321,7 +348,7 @@ function updateCustomers(dt) {
       cu.holder.position.copy(cu.body.position); cu.holder.quaternion.copy(cu.body.quaternion); cu.g.walk(0);
       if (cu.t > 7) { cu.state = 'rise'; cu.t = 0; cu.q0 = cu.holder.quaternion.clone(); cu.x = cu.body.position.x; cu.z = cu.body.position.z; cu.y0 = cu.body.position.y; world.removeBody(cu.body); cu.body = null; cu.qUp = new THREE.Quaternion(); pushOut(cu, 0.5); say(cu, pick(['아이고 허리야…', '누가 카트를 저렇게 몰아!', '진짜 화나네!', '매니저 불러요!']), 2.5, true); }
     } else if (cu.state === 'rise') {
-      const k = Math.min(1, cu.t / 1.2); cu.holder.quaternion.slerpQuaternions(cu.q0, cu.qUp, k); cu.holder.position.set(cu.x, cu.y0 + (0.85 - cu.y0) * k, cu.z);
+      const k = Math.min(1, cu.t / 1.2); cu.holder.quaternion.slerpQuaternions(cu.q0, cu.qUp, k); cu.holder.position.set(cu.x, cu.y0 + (0.85 + hAt(cu.x, cu.z) - cu.y0) * k, cu.z);
       if (k >= 1) { cu.state = 'walk'; cu.t = 0; pickTarget(cu); }
     }
   }
@@ -333,7 +360,8 @@ function endRace() {
     const rank = finishOrder.indexOf(player) + 1;
     $('finTitle').textContent = rank === 1 ? '🏆 우승!' : `결승! ${rank}위`;
     const rows = finishOrder.map((c, i) => `${i + 1}위 ${c.name} — ${fmt(c.time)}`).join('<br>');
-    $('finBody').innerHTML = `${rows}<br><br>기록: <b>${fmt(player.time)}</b><br>넘어뜨린 손님: ${stats.knocked}명 · 떨어뜨린 상품: ${stats.spilled}개<br>혼돈 지수: <b>${chaos()}</b>`;
+    const best = getBest(TR.MAP_ID);
+    $('finBody').innerHTML = `${rows}<br><br>기록: <b>${fmt(player.time)}</b> · 맵: ${TR.MAP.icon} ${TR.MAP.name}<br>🏅 이 맵 최고 랩: <b>${best ? fmt(best) : '-'}</b>${player.newBest ? ' <span class="nb">신기록!</span>' : ''}<br>넘어뜨린 손님: ${stats.knocked}명 · 떨어뜨린 상품: ${stats.spilled}개<br>혼돈 지수: <b>${chaos()}</b>`;
     $('finish').classList.remove('hidden');
   }, 1200);
 }
@@ -366,7 +394,7 @@ function updateBubbles() {
     const b = bubbles[i]; b.t += 1 / 60;
     if (b.t > b.dur) { b.el.remove(); bubbles.splice(i, 1); continue; }
     const p = b.ent.holder ? b.ent.holder.position : b.ent.g.root.position;
-    _v.set(p.x, (b.ent.holder ? (b.ent.body ? p.y + 1.2 : 2.3) : 2.6), p.z).project(camera);
+    _v.set(p.x, (b.ent.holder ? (b.ent.body ? p.y + 1.2 : p.y + 1.45) : p.y + 2.6), p.z).project(camera);
     if (_v.z > 1) { b.el.style.display = 'none'; continue; }
     b.el.style.display = ''; b.el.style.opacity = Math.min(1, (b.dur - b.t) * 2, b.t * 6);
     b.el.style.transform = `translate(-50%,-100%) translate(${Math.max(60, Math.min(innerWidth - 60, (_v.x * 0.5 + 0.5) * innerWidth))}px,${(-_v.y * 0.5 + 0.5) * innerHeight}px)`;
@@ -380,15 +408,27 @@ setInterval(() => { if (state !== 'race') return; const sorted = [...carts].sort
 const puffs = [], puffG = new THREE.SphereGeometry(0.25, 6, 5);
 function puff(x, y, z, col, n) { for (let i = 0; i < n; i++) { let p = puffs.find(q => q.life <= 0);
   if (!p) { if (puffs.length > (QUALITY === 'low' ? 24 : 60)) return; p = { m: new THREE.Mesh(puffG, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false })), life: 0, v: new THREE.Vector3() }; scene.add(p.m); puffs.push(p); }
-  p.m.material.color.setHex(col); p.m.visible = true; p.m.position.set(x, y, z); p.v.set(Math.random() * 4 - 2, Math.random() * 3, Math.random() * 4 - 2); p.life = 0.6 + Math.random() * 0.3; } }
+  p.m.material.color.setHex(col); p.m.visible = true; p.m.position.set(x, y + hAt(x, z), z); p.v.set(Math.random() * 4 - 2, Math.random() * 3, Math.random() * 4 - 2); p.life = 0.6 + Math.random() * 0.3; } }
 function updatePuffs(dt) { for (const p of puffs) { if (p.life <= 0) continue; p.life -= dt; p.m.position.addScaledVector(p.v, dt); p.v.multiplyScalar(0.92);
   p.m.scale.setScalar(1 + (1 - p.life) * 2); p.m.material.opacity = Math.max(0, p.life); if (p.life <= 0) p.m.visible = false; } }
 // ---------- minimap ----------
-const mm = $('minimap'), mctx = mm.getContext('2d'); const MW = mm.width, MH = mm.height, sx = x => (x + HX + HW + 3) / (2 * (HX + HW + 3)) * MW, sz = z => (z + HZ + HW + 3) / (2 * (HZ + HW + 3)) * MH;
+const mm = $('minimap'), mctx = mm.getContext('2d'); const MW = mm.width, MH = mm.height; let mmS = 1, sx = x => x, sz = z => z, mmBg = null;
+function setupMinimap() { // fit the current map's bounds; pre-render the static layer
+  const B = TR.MAP.bounds; mmS = Math.min(MW / (B.x1 - B.x0), MH / (B.z1 - B.z0)); const ox = (MW - (B.x1 - B.x0) * mmS) / 2, oz = (MH - (B.z1 - B.z0) * mmS) / 2;
+  sx = x => ox + (x - B.x0) * mmS; sz = z => oz + (z - B.z0) * mmS;
+  mmBg = document.createElement('canvas'); mmBg.width = MW; mmBg.height = MH; const g = mmBg.getContext('2d');
+  g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(0, 0, MW, MH); g.lineJoin = 'round';
+  g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = Math.max(4, 2 * TR.HW * mmS * 0.75); g.beginPath(); path.forEach((p, i) => i ? g.lineTo(sx(p.x), sz(p.y)) : g.moveTo(sx(p.x), sz(p.y))); g.closePath(); g.stroke();
+  g.strokeStyle = 'rgba(255,214,120,.75)'; g.lineWidth = Math.max(2, TR.HW * mmS * 0.6); g.beginPath(); let on = false; // elevated parts
+  path.forEach((p, i) => { const up = hAt(p.x, p.y) > 0.5; if (up && !on) g.moveTo(sx(p.x), sz(p.y)); else if (up) g.lineTo(sx(p.x), sz(p.y)); on = up; }); g.stroke();
+  for (const r of TR.MAP.open || []) { g.fillStyle = 'rgba(255,214,120,.75)'; g.fillRect(sx(r.x0), sz(r.z0 + 0.5), (r.x1 - r.x0) * mmS, (r.z1 - r.z0 - 1) * mmS); }
+  for (const zn of TR.MAP.zones) { g.fillStyle = { ice: 'rgba(160,230,255,.9)', walk: 'rgba(79,195,247,.95)', esc: 'rgba(255,213,79,.9)', bump: 'rgba(253,216,53,.95)' }[zn.t]; g.fillRect(sx(zn.x0), sz(zn.z0), Math.max(1.5, (zn.x1 - zn.x0) * mmS), Math.max(1.5, (zn.z1 - zn.z0) * mmS)); }
+  for (const s of strips) if (s.kind === 'pillar' || s.kind === 'car') { g.fillStyle = s.kind === 'car' ? '#90a4ae' : '#cfd8dc'; g.fillRect(sx(s.x0), sz(s.z0), Math.max(1.5, (s.x1 - s.x0) * mmS), Math.max(1.5, (s.z1 - s.z0) * mmS)); }
+  const p0 = path[0], [tx, tz] = tangentAt(0); g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.moveTo(sx(p0.x - tz * TR.HW), sz(p0.y + tx * TR.HW)); g.lineTo(sx(p0.x + tz * TR.HW), sz(p0.y - tx * TR.HW)); g.stroke();
+}
 function drawMinimap() {
-  mctx.clearRect(0, 0, MW, MH); mctx.fillStyle = 'rgba(0,0,0,.45)'; mctx.fillRect(0, 0, MW, MH);
-  mctx.strokeStyle = 'rgba(255,255,255,.55)'; mctx.lineWidth = 7; mctx.beginPath(); path.forEach((p, i) => i ? mctx.lineTo(sx(p.x), sz(p.y)) : mctx.moveTo(sx(p.x), sz(p.y))); mctx.closePath(); mctx.stroke();
-  mctx.fillStyle = '#fff'; mctx.fillRect(sx(0) - 1, sz(-HZ) - 5, 2, 10);
+  mctx.clearRect(0, 0, MW, MH); if (mmBg) mctx.drawImage(mmBg, 0, 0);
+  for (const T of traffic) { mctx.fillStyle = '#ff7043'; mctx.fillRect(sx(T.x) - 2.5, sz(T.z) - 2.5, 5, 5); }
   for (const cu of customers) { const x = cu.body ? cu.body.position.x : cu.x, z = cu.body ? cu.body.position.z : cu.z; mctx.fillStyle = cu.state === 'walk' ? '#bbb' : '#f44'; mctx.fillRect(sx(x) - 1, sz(z) - 1, 2, 2); }
   for (const c of carts) { if (c.inactive) continue; mctx.fillStyle = '#' + c.color.toString(16).padStart(6, '0'); mctx.beginPath(); mctx.arc(sx(c.x), sz(c.z), c === player ? 4.5 : 3.5, 0, 7); mctx.fill(); if (c === player) { mctx.strokeStyle = '#fff'; mctx.lineWidth = 1.5; mctx.stroke(); } }
 }
@@ -396,19 +436,89 @@ function drawMinimap() {
 // ---------- fun systems: drift FX, items, events ----------
 let annT = null;
 function announce(t) { const el = $('event'); el.textContent = '📢 ' + t; el.classList.add('show'); clearTimeout(annT); annT = setTimeout(() => el.classList.remove('show'), 3500); }
-const fun = createFun({ scene, world, carts, path, N, strips, customers, sound, get player() { return player; }, textSprite, say, puff, flash, spawnProduct, stats, insideShelf, circlePush, announce, retarget, pushOut,
-  shakeIt: k => { shake = Math.max(shake, k); }, lights: { hemi, dl, dl2 } });
+let fun = null, funOwned = null;
+function makeFun() {
+  const s0 = new Set(scene.children), b0 = new Set(world.bodies);
+  fun = createFun({ scene, world, carts, path, N, strips, customers, sound, get player() { return player; }, textSprite, say, puff, flash, spawnProduct, stats, insideShelf, circlePush, announce, retarget, pushOut,
+    shakeIt: k => { shake = Math.max(shake, k); }, lights: { hemi, dl, dl2 }, extraObs });
+  funOwned = { objs: scene.children.filter(o => !s0.has(o)), bodies: world.bodies.filter(b => !b0.has(b)) };
+}
+function disposeFun() {
+  fun.reset();
+  const freeMat = m => { if (!m) return; for (const x of Array.isArray(m) ? m : [m]) { if (x.map) x.map.dispose(); x.dispose(); } };
+  for (const o of funOwned.objs) { scene.remove(o); o.traverse(n => { if (n.geometry) n.geometry.dispose(); freeMat(n.material); }); }
+  for (const b of funOwned.bodies) world.removeBody(b);
+  for (const c of carts) if (c.shieldMesh) { c.g.root.remove(c.shieldMesh); c.shieldMesh.geometry.dispose(); c.shieldMesh.material.dispose(); c.shieldMesh = null; }
+}
+// ---------- map-specific moving things: freezer doors (strips toggled on a shared clock) & parking-lot traffic ----------
+const traffic = []; let honkCd = 0;
+function makeCar(col) {
+  const g = new THREE.Group(), body = new THREE.Mesh(new THREE.BoxGeometry(2, 0.8, 4.2), new THREE.MeshLambertMaterial({ color: col })); body.position.y = 0.65; g.add(body);
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.6, 2.2), new THREE.MeshLambertMaterial({ color: 0x263238 })); cab.position.set(0, 1.3, -0.2); g.add(cab);
+  const hl = new THREE.MeshBasicMaterial({ color: 0xfff59d }); for (const s of [-0.65, 0.65]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.05), hl); l.position.set(s, 0.7, 2.11); g.add(l); }
+  const wm = new THREE.MeshLambertMaterial({ color: 0x111111 }); for (const sx2 of [-1, 1]) for (const sz2 of [-1.35, 1.35]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.33, 0.25, 10), wm); w.rotation.z = Math.PI / 2; w.position.set(sx2 * 0.95, 0.33, sz2); g.add(w); }
+  scene.add(g); return g;
+}
+function mapClock() { return state === 'race' || state === 'finished' ? raceT : state === 'countdown' ? 0 : performance.now() / 1000; }
+function updateMapFx(dt) {
+  const T = mapClock(); honkCd -= dt;
+  for (const d of trk.doors) { const s = d.strip; if (s.slam > 0) s.slam -= dt;
+    const open = !(s.slam > 0) && ((T + d.phase) % d.period) < 2.2;
+    if (open && s.off && Math.hypot(d.x - player.x, d.z - player.z) < 18) sound.door();
+    s.off = !open; d.ang += ((open ? d.openRot : 0) - d.ang) * Math.min(1, dt * 12); d.pivot.rotation.y = d.ang; }
+  for (const C of traffic) {
+    const f = ((C.off * N - T * 4.5) % N + N) % N, i0 = Math.floor(f), k = f - i0, lat = TR.MAP.inSign * 6.3;
+    const a = atLane(i0, lat), b = atLane(i0 + 1, lat); C.x = a.x + (b.x - a.x) * k; C.z = a.z + (b.z - a.z) * k; C.h = Math.atan2(a.x - b.x, a.z - b.z);
+    C.g.position.set(C.x, hAt(C.x, C.z), C.z); C.g.rotation.y = C.h;
+    for (const c of carts) if (!c.inactive && !c.net && circlePush(c, C.x, C.z, 2.7, 0.5) && c === player && (c.carHit || 0) < performance.now()) { c.carHit = performance.now() + 900; sound.honk(); sound.bump(1); shake = 0.7; flash('빵빵! 🚗 차에 부딪혔다!'); if (c.riders && c.riders.length) hopOut(c, 'crash'); }
+    const dp = Math.hypot(C.x - player.x, C.z - player.z); if (dp < 16 && honkCd <= 0 && state === 'race') { honkCd = 4; sound.honk(); say(C.ent, pick(['빵빵! 비켜요~', '카트는 인도로!', '주차장에서 경주라니!']), 1.6); }
+    if (MODE !== 'guest') for (const cu of customers) if (cu.state === 'walk' && Math.hypot(cu.x - C.x, cu.z - C.z) < 2.8) { const a2 = Math.atan2(cu.x - C.x, cu.z - C.z); cu.x = C.x + Math.sin(a2) * 2.8; cu.z = C.z + Math.cos(a2) * 2.8; pushOut(cu, 0.5); if (Math.random() < 0.02) say(cu, pick(['어머, 차다!', '천천히 가요!']), 1.4); } // pedestrians jump aside
+  }
+}
+function extraObs() { const o = []; for (const C of traffic) o.push({ x: C.x, z: C.z, r: 2.6 }); if (trk) for (const d of trk.doors) if (!d.strip.off) o.push({ x: d.x, z: d.z, r: 1.1 }); return o; }
+// ---------- map loading (title / lobby only) ----------
+function loadMap(id) {
+  if (!MAPS[id]) id = 'mart';
+  if (fun) disposeFun(); if (trk) trk.dispose();
+  for (const C of traffic) { scene.remove(C.g); C.g.traverse(n => { if (n.geometry) n.geometry.dispose(); }); } traffic.length = 0;
+  for (const p of products) { scene.remove(p.mesh); world.removeBody(p.body); } products.length = 0;
+  for (const m of mirror) m.mesh.visible = false;
+  for (const b of bubbles.splice(0)) b.el.remove();
+  seeded(hashStr(id) + 20261016, () => {
+    setMap(id); N = path.length; trk = buildWorld(scene, world);
+    const T = TR.MAP.theme; scene.background.set(T.bg); scene.fog.color.set(T.fogCol ?? T.bg); scene.fog.near = T.fog[0]; scene.fog.far = T.fog[1]; hemi.intensity = T.hemi; dl.intensity = T.dl; dl2.intensity = T.dl2;
+    makeFun();
+    if (TR.MAP.traffic) for (let k = 0; k < 2; k++) { const g = makeCar([0x1e88e5, 0xeeeeee][k]); traffic.push({ g, off: 0.3 + k * 0.5, x: 0, z: 0, h: 0, ent: { g: { root: g } } }); }
+    for (const cu of customers) {
+      if (cu.body) { world.removeBody(cu.body); cu.body = null; }
+      Object.assign(cu, { state: 'walk', cart: null, rush: null, nt: null, pause: 0, t: 0 }); cu.holder.scale.setScalar(1); cu.holder.quaternion.identity();
+      let i = (Math.random() * N) | 0; if (i < 12 || i > N - 4) i = (i + 20) % N;
+      const p = atLane(i, (Math.random() * 2 - 1) * (TR.HW - 1.5)); cu.x = p.x; cu.z = p.z; pushOut(cu, 0.5); retarget(cu); cu.holder.position.set(cu.x, 0.85 + hAt(cu.x, cu.z), cu.z);
+    }
+  });
+  carts.forEach((c, i) => { const was = c.inactive; c.riders = []; resetCart(c, i); c.inactive = was; if (was) { c.x = c.z = 999; } });
+  setupMinimap(); camPos.set(0, 0, 0); shake = 0; localStorage.setItem('cartMap', TR.MAP_ID); renderMaps();
+}
+function renderMaps() {
+  const host = NET.mode === 'host', guest = NET.mode === 'guest';
+  for (const [elId, lobby] of [['mapRow', false], ['lobbyMaps', true]]) {
+    const el = $(elId); if (!el) continue; const locked = lobby && guest;
+    el.innerHTML = MAP_IDS.map(id => { const M = MAPS[id], b = getBest(id); return `<button class="mapc ${id === TR.MAP_ID ? 'sel' : ''}" data-map="${id}" ${locked ? 'disabled' : ''}><span class="mi">${M.icon}</span><b>${M.name}</b><small>${b ? '🏅 ' + fmt(b) : '기록 없음'}</small></button>`; }).join('');
+    el.querySelectorAll('[data-map]').forEach(btn => btn.onclick = () => { if (locked || !(state === 'title' || state === 'lobby')) return; loadMap(btn.dataset.map); if (host) { NET.map = TR.MAP_ID; pushLobby(); } });
+  }
+  const d = $('mapDesc'); if (d) d.textContent = TR.MAP.desc; const ld = $('lobbyMapNote'); if (ld) ld.textContent = guest ? `맵: ${TR.MAP.icon} ${TR.MAP.name} (호스트가 선택)` : host ? '맵을 선택하세요 (게스트에게 자동 동기화)' : '';
+}
 Math.random = _rand;
 
 // ---------- multiplayer glue (host-authoritative; see net.js) ----------
 let MODE = 'solo', netAcc = 0, snapN = 0, mpDone = false, firstFinT = 0;
 const r2 = v => Math.round(v * 100) / 100;
-const GRID = i => ({ x: -4 - (i >> 1) * 5, z: -HZ + (i % 2 ? 2.5 : -2.5) });
+const GRID = i => { const p = path[0], [tx, tz] = tangentAt(0), back = 4 + (i >> 1) * 5, lat = i % 2 ? 2.5 : -2.5; return { x: p.x - tx * back - tz * lat, z: p.y - tz * back + tx * lat, h: Math.atan2(tx, tz) }; };
 const CU_ST = ['walk', 'down', 'rise', 'ride'];
 function resetCart(c, i) {
   if (c.riders && c.riders.length) hopOut(c);
   const g = GRID(i);
-  Object.assign(c, { x: g.x, z: g.z, h: Math.PI / 2, vd: Math.PI / 2, v: 0, finished: false, time: 0, n2o: 0, gauge: 0, combo: 0, item: null, spin: 0, boostT: 0, instT: 0,
+  Object.assign(c, { x: g.x, z: g.z, h: g.h, vd: g.h, v: 0, lapT0: null, lapMax: null, laps: [], newBest: false, lastZone: null, bumpT: 0, finished: false, time: 0, n2o: 0, gauge: 0, combo: 0, item: null, spin: 0, boostT: 0, instT: 0,
     drifting: false, slip: 0, riderN: 0, stuck: 0, reverse: 0, magnetT: 0, shieldT: 0, hitSeq: 0, hitSeqSeen: 0, rs: null, ns: null, net: false, remote: false, inactive: false, useItem: false, useN2O: false });
   c.idx = nearestIdx(c.x, c.z, 0, N); c.lap = c.idx > N / 2 ? -1 : 0; c.prog = c.lap * N + c.idx;
 }
@@ -429,7 +539,7 @@ function startRaceMP(slots, you, mode) {
   });
   player = carts[you]; player.ai = false; player.name = slots[you] ? slots[you].name : '나';
   $('finish').classList.add('hidden'); $('title').classList.add('hidden');
-  camPos.set(player.x - 8, 4.2, player.z); camLook.set(player.x + 4, 1.2, player.z);
+  camPos.set(0, 0, 0); camLook.set(player.x, 1.2 + hAt(player.x, player.z), player.z);
   state = 'countdown'; cd = 3.99; initAudio();
 }
 const SOLO_SLOTS = () => carts.map((c, i) => ({ type: i ? 'bot' : 'human', name: c.baseName }));
@@ -497,7 +607,7 @@ function guestBumps(c) {
     else if (h.type === 'sign' && d < h.r + 0.4 && !h.gone && h.arm <= 0) { h.gone = true; NET.send({ t: 'hz', id: h.id }); h.mesh.visible = false; c.v *= 0.55; puff(h.x, 0.6, h.z, 0xffd600, 5); sound.bump(0.8); shake = Math.max(shake, 0.3); } }
   for (const cu of customers) if ((cu.state === 'down' || cu.state === 'rise') && circlePush(c, cu.holder.position.x, cu.holder.position.z, 1.7, 0.9)) {}
   const E = fun.ev; if (E.vip) circlePush(c, E.vip.x, E.vip.z, 3.4, 0.9); if (E.fork && E.forkT) circlePush(c, E.forkT[0], E.forkT[1], 2.2, 0.6);
-  for (const m of mirror) if (m.mesh.visible) { const b = m.mesh.position; if (b.y < 0.6 && Math.abs(b.x - c.x) < 1.4 && Math.abs(b.z - c.z) < 1.4) c.v *= 0.993; }
+  for (const m of mirror) if (m.mesh.visible) { const b = m.mesh.position; if (b.y - hAt(b.x, b.z) < 0.6 && Math.abs(b.x - c.x) < 1.4 && Math.abs(b.z - c.z) < 1.4) c.v *= 0.993; }
   for (const cu of customers) if (cu.state === 'walk' && Math.hypot(c.x - cu.x, c.z - cu.z) < 1.3 && (c.bump || 0) <= 0) { c.v *= Math.abs(c.v) > 9 ? 0.75 : 0.5; c.bump = 0.6; sound.bump(0.6); }
 }
 function onSay(m) { const ent = m.k === 'u' ? customers[m.i] : carts[m.i]; if (ent && !ent.inactive) say(ent, m.text, m.dur, true); }
@@ -535,14 +645,14 @@ function toLobby() {
 function leftRoom() {
   MODE = 'solo'; fun.reset();
   carts.forEach((c, i) => { resetCart(c, i); c.g.root.visible = true; c.ai = i > 0; c.name = c.baseName; nameTag(c, null); });
-  for (const cu of customers) { cu.nt = null; if (cu.state !== 'walk' || !cu.body) { if (cu.body) { world.removeBody(cu.body); cu.body = null; } cu.state = 'walk'; cu.cart = null; cu.rush = null; cu.holder.scale.setScalar(1); cu.holder.rotation.set(0, 0, 0); cu.x = cu.holder.position.x; cu.z = cu.holder.position.z; cu.holder.position.y = 0.85; pushOut(cu, 0.5); retarget(cu); } }
+  for (const cu of customers) { cu.nt = null; if (cu.state !== 'walk' || !cu.body) { if (cu.body) { world.removeBody(cu.body); cu.body = null; } cu.state = 'walk'; cu.cart = null; cu.rush = null; cu.holder.scale.setScalar(1); cu.holder.rotation.set(0, 0, 0); cu.x = cu.holder.position.x; cu.z = cu.holder.position.z; cu.holder.position.y = 0.85 + hAt(cu.x, cu.z); pushOut(cu, 0.5); retarget(cu); } }
   player = carts[0]; state = 'lobby'; $('finish').classList.add('hidden'); $('restart').classList.remove('hidden');
 }
-initNet({ onRemoteHazard: (i, id, sh) => { const c = carts[i]; if (c && c.remote) fun.remoteHazardHit(c, id, sh); }, startRace: startRaceMP, onRemoteState, onRemoteCrash, onRemoteItem, onSpawn, slotToBot, onSnap, onSay, onSlots, showResults, toLobby, leftRoom,
+initNet({ getMap: () => TR.MAP_ID, onMap: id => { if (id !== TR.MAP_ID) loadMap(id); }, renderMaps: () => renderMaps(), onRemoteHazard: (i, id, sh) => { const c = carts[i]; if (c && c.remote) fun.remoteHazardHit(c, id, sh); }, startRace: startRaceMP, onRemoteState, onRemoteCrash, onRemoteItem, onSpawn, slotToBot, onSnap, onSay, onSlots, showResults, toLobby, leftRoom,
   onMenu: open => { if (state === 'title' || state === 'lobby') state = open ? 'lobby' : 'title'; } });
 
 // ---------- loop ----------
-const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
+const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(); let camY = 0;
 let last = performance.now(), acc = 0;
 let lowPhys = QUALITY === 'low', fpsN = 0, fpsT = performance.now(), fps = 60;
 function adapt(now) {
@@ -570,35 +680,36 @@ function step(dt) {
   for (const c of carts) updateCart(c, dt);
   interactions(dt);
   fun.update(dt, state, raceT, MODE === 'guest');
+  updateMapFx(dt); trk.tick(dt);
   if (MODE === 'guest') guestCustomers(dt); else updateCustomers(dt);
-  for (const c of carts) { c.body.position.set(c.x, 0.7, c.z + 0); c.body.quaternion.setFromEuler(0, c.h, 0); c.body.velocity.set(Math.sin(c.vd) * c.v, 0, Math.cos(c.vd) * c.v); }
+  for (const c of carts) { c.body.position.set(c.x, 0.7 + hAt(c.x, c.z), c.z); c.body.quaternion.setFromEuler(0, c.h, 0); c.body.velocity.set(Math.sin(c.vd) * c.v, 0, Math.cos(c.vd) * c.v); }
   const PH = lowPhys ? 1 / 30 : 1 / 60; acc += dt; let n = 0; while (acc >= PH && n < 3) { world.step(PH); acc -= PH; n++; } if (n === 3) acc = 0;
-  for (const c of carts) { c.body.position.set(c.x, 0.7, c.z); }
+  for (const c of carts) { c.body.position.set(c.x, 0.7 + hAt(c.x, c.z), c.z); }
   for (const cu of customers) if (cu.body) { const bp = cu.body.position, o = { x: bp.x, z: bp.z }; if (pushOut(o, 0.45)) { bp.x = o.x; bp.z = o.z; cu.body.velocity.x *= -0.3; cu.body.velocity.z *= -0.3; } }
   mpTick(dt);
   msgT -= dt; if (msgT <= 0) $('msg').textContent = '';
 }
 function render(dt) {
-  for (const c of carts) { if (c.inactive) continue; c.g.root.position.set(c.x, 0, c.z); c.drift = (c.drift || 0) + ((c.steerIn || 0) * Math.min(1, Math.abs(c.v) / 18) * 0.28 - (c.drift || 0)) * Math.min(1, dt * 5); c.g.root.rotation.y = c.h + (c.drifting ? 0 : c.drift * 0.5); c.g.update(c.v, dt);
+  for (const c of carts) { if (c.inactive) continue; { const fx = Math.sin(c.h), fz = Math.cos(c.h); c.g.root.position.set(c.x, hAt(c.x, c.z), c.z); c.g.root.rotation.x = -Math.atan((hAt(c.x + fx, c.z + fz) - hAt(c.x - fx, c.z - fz)) / 2); } c.drift = (c.drift || 0) + ((c.steerIn || 0) * Math.min(1, Math.abs(c.v) / 18) * 0.28 - (c.drift || 0)) * Math.min(1, dt * 5); c.g.root.rotation.y = c.h + (c.drifting ? 0 : c.drift * 0.5); c.g.update(c.v, dt);
     if (Math.abs(c.slip || 0) > 0.12 && Math.abs(c.v) > 5) { c.skT = (c.skT || 0) - dt; if (c.skT <= 0) { c.skT = 0.04; fun.skid(c); if (c.drifting && Math.random() < 0.5) puff(c.x - Math.sin(c.h) * 0.6, 0.2, c.z - Math.cos(c.h) * 0.6, Math.random() < 0.5 ? 0xffb300 : 0xdddddd, 1); } } }
   updatePuffs(dt); updateBubbles(); drawMinimap();
   for (const p of products) { p.mesh.position.copy(p.body.position); p.mesh.quaternion.copy(p.body.quaternion); }
   const p = player, chd = p.vd + ang(p.h - p.vd) * 0.4, fx = Math.sin(chd), fz = Math.cos(chd);
-  const want = new THREE.Vector3(p.x - fx * 8, 4.2, p.z - fz * 8);
-  { const ci = nearestIdx(want.x, want.z, 0, N), cp = path[ci], dx = want.x - cp.x, dz = want.z - cp.y, d = Math.hypot(dx, dz), lim = HW - 0.7; // keep camera inside the aisle
+  const py = hAt(p.x, p.z); camY += (py - camY) * Math.min(1, dt * 6); const want = new THREE.Vector3(p.x - fx * 8, 4.2 + camY, p.z - fz * 8);
+  if (!(TR.MAP.camOpen || []).some(r => inRect(r, want.x, want.z) || inRect(r, p.x, p.z))) { const ci = nearestIdx(want.x, want.z, 0, N), cp = path[ci], dx = want.x - cp.x, dz = want.z - cp.y, d = Math.hypot(dx, dz), lim = TR.HW - 0.7; // keep camera inside the aisle
     if (d > lim) { want.x = cp.x + dx / d * lim; want.z = cp.y + dz / d * lim; } }
   for (let k = 0; k < 10; k++) { // keep camera out of shelves
-    const inside = strips.some(st => want.x > st.x0 - 0.4 && want.x < st.x1 + 0.4 && want.z > st.z0 - 0.4 && want.z < st.z1 + 0.4);
+    const inside = strips.some(st => !st.off && st.kind !== 'door' && want.x > st.x0 - 0.4 && want.x < st.x1 + 0.4 && want.z > st.z0 - 0.4 && want.z < st.z1 + 0.4);
     if (!inside) break; want.x += (p.x - want.x) * 0.2; want.z += (p.z - want.z) * 0.2; }
   camPos.lerp(want, 1 - Math.exp(-dt * 5)); if (camPos.lengthSq() === 0) camPos.copy(want);
-  camLook.lerp(new THREE.Vector3(p.x + fx * 4, 1.2, p.z + fz * 4), 1 - Math.exp(-dt * 8));
+  camLook.lerp(new THREE.Vector3(p.x + fx * 4, 1.2 + py, p.z + fz * 4), 1 - Math.exp(-dt * 8));
   camera.position.copy(camPos); camera.lookAt(camLook);
   if (shake > 0) { shake = Math.max(0, shake - dt * 2); camera.position.x += (Math.random() - .5) * shake; camera.position.y += (Math.random() - .5) * shake * 0.6; }
   camera.fov = (innerWidth < innerHeight ? 80 : 65) + Math.max(0, p.v - 18) * 0.8; camera.updateProjectionMatrix();
   // HUD
   const active = carts.filter(c => !c.inactive), sorted = [...active].sort((a, b) => b.prog - a.prog);
   $('time').textContent = fmt(state === 'finished' ? p.time : raceT);
-  $('lap').textContent = `${Math.min(LAPS, Math.max(1, p.lap + 1))}/${LAPS}`;
+  $('lap').textContent = `${Math.min(LAPS, Math.max(1, p.lap + 1))}/${LAPS}`; { const b = getBest(TR.MAP_ID); const t = b ? fmt(b) : '-'; if ($('best').textContent !== t) $('best').textContent = t; }
   $('rank').textContent = `${(p.finished && finishOrder.includes(p) ? finishOrder.indexOf(p) : sorted.indexOf(p)) + 1}/${active.length}`;
   $('speed').textContent = `${Math.round(Math.abs(p.v) * 3.6)} km/h`;
   $('boostFill').style.width = `${p.gauge * 100}%`;
@@ -610,6 +721,7 @@ function render(dt) {
   $('chaos').textContent = chaos(); $('knocked').textContent = stats.knocked; $('spilled').textContent = stats.spilled;
   renderer.render(scene, camera);
 }
-camPos.set(player.x - 8, 4.2, player.z); camLook.set(player.x + 4, 1.2, player.z);
+loadMap(new URLSearchParams(location.search).get('map') || localStorage.getItem('cartMap') || 'mart');
+camLook.set(player.x + 4, 1.2, player.z);
 requestAnimationFrame(frame);
-window.__game = { get perf() { return { fps: Math.round(fps), pr, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, quality: QUALITY }; }, debugNearFinish() { const p = player, q = path[N - 4]; p.x = q.x; p.z = q.y; p.idx = N - 4; p.lap = LAPS - 1; p.h = p.vd = Math.PI / 2; p.v = 10; }, get MODE() { return MODE; }, NET, get player() { return player; }, get raceT() { return raceT; }, knock: (i, c) => knockCustomer(customers[i], c || player), startGame, hopOut, fun, insideShelf, get autoAccel() { return autoAccel; }, carts, customers, products, stats, keys, get state() { return state; } };
+window.__game = { get perf() { return { fps: Math.round(fps), pr, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, quality: QUALITY }; }, debugNearFinish() { const p = player, q = path[N - 4], [tx, tz] = tangentAt(N - 4); p.x = q.x; p.z = q.y; p.idx = N - 4; p.lap = LAPS - 1; p.h = p.vd = Math.atan2(tx, tz); p.v = 10; }, loadMap, get MAP() { return TR.MAP_ID; }, get N() { return N; }, path, strips, traffic, get trk() { return trk; }, hAt, getBest, get MODE() { return MODE; }, NET, get player() { return player; }, get raceT() { return raceT; }, knock: (i, c) => knockCustomer(customers[i], c || player), startGame, hopOut, fun, insideShelf, get autoAccel() { return autoAccel; }, carts, customers, products, stats, keys, get state() { return state; } };

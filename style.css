@@ -49,13 +49,13 @@ body.touch #hudB{bottom:auto;top:110px;right:12px}
 #touch .boost{width:96px;height:96px;font-size:18px}
 #auto{position:fixed;top:12px;left:calc(50% + 50px);margin:0;padding:8px 12px;font-size:13px;background:rgba(0,0,0,.45);border-radius:16px;z-index:5}
 body.touch #auto{display:none}
-#minimap{position:fixed;left:12px;top:130px;width:150px;height:100px;border-radius:8px;pointer-events:none}
+#minimap{position:fixed;left:12px;top:158px;width:150px;height:100px;border-radius:8px;pointer-events:none}
 #bubbles{position:fixed;inset:0;pointer-events:none;overflow:hidden}
 .bubble{position:absolute;left:0;top:0;background:#fff;color:#222;padding:5px 10px;border-radius:14px;font-size:15px;font-weight:bold;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.35);will-change:transform,opacity}
 .bubble:after{content:"";position:absolute;left:50%;bottom:-7px;margin-left:-6px;border:6px solid transparent;border-top-color:#fff;border-bottom:0}
 .bubble.cart{background:#fff3c4}
 @media (max-width:700px),(max-height:500px){
- #minimap{top:92px;left:8px;width:110px;height:73px}
+ #minimap{top:116px;left:8px;width:110px;height:73px}
  .bubble{font-size:12px;padding:3px 8px}
  #touch .dpad{width:174px;height:174px}#touch .dpad button{width:58px;height:58px;font-size:22px}
  #touch .dpad .up{left:58px}#touch .dpad .down{left:58px}#touch .dpad .left,#touch .dpad .right{top:58px}
@@ -104,3 +104,17 @@ body.touch #auto{display:none}
 #slots .slot button{margin:0;padding:4px 10px;font-size:13px;background:#a33}#slots .empty{opacity:.5}
 #chatLog{height:90px;overflow:auto;background:#0004;border-radius:8px;padding:6px;font-size:13px;margin-top:10px}#chatIn{margin-top:6px}
 .qrow{margin-top:12px;font-size:15px}.qrow select{font-size:15px;padding:4px 8px;border-radius:6px}
+/* map selection */
+.mapsel { margin: 6px 0 10px; }
+.mlabel { font-weight: 700; margin-bottom: 6px; }
+.maprow { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.mapc { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 96px; padding: 8px 10px; border-radius: 12px; border: 2px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #fff; font: inherit; cursor: pointer; }
+.mapc .mi { font-size: 26px; line-height: 1; }
+.mapc b { font-size: 14px; } .mapc small { font-size: 11px; opacity: .8; }
+.mapc.sel { border-color: #ffd54f; background: rgba(255,213,79,.22); box-shadow: 0 0 0 2px rgba(255,213,79,.35); }
+.mapc:disabled { cursor: default; opacity: .55; } .mapc.sel:disabled { opacity: 1; }
+.maprow.small { margin: 8px 0 2px; } .maprow.small .mapc { min-width: 74px; padding: 5px 6px; } .maprow.small .mi { font-size: 18px; }
+#mapDesc { margin-top: 6px; min-height: 1.2em; }
+.nb { color: #ffd54f; font-weight: 700; }
+@media (max-width: 600px), (max-height: 500px) { .mapc { min-width: 70px; padding: 5px 6px; } .mapc .mi { font-size: 18px; } .mapc b { font-size: 12px; } }
+.tpanel{max-height:96vh;overflow:auto}

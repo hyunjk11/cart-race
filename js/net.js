@@ -5,7 +5,7 @@ const COLORS = ['#ff4f8b', '#43d17a', '#ffc107', '#9c5cff'];
 const MAX = 4;
 const qs = new URLSearchParams(location.search);
 let Peer = null, peer = null, api = null;
-export const NET = { mode: 'solo', you: 0, slots: [], conns: new Map(), hostConn: null, code: '', inRace: false, send() {}, broadcast() {} };
+export const NET = { mode: 'solo', you: 0, slots: [], conns: new Map(), hostConn: null, code: '', inRace: false, map: 'mart', send() {}, broadcast() {} };
 
 const ERR = {
   'peer-unavailable': '방을 찾을 수 없습니다. 코드를 확인해 주세요.',
@@ -38,7 +38,7 @@ async function createRoom(tries = 0) {
   peer.on('open', () => {
     NET.mode = 'host'; NET.you = 0; NET.slots = [{ type: 'human', name, ready: true, id: 'host' }, null, null, null];
     NET.broadcast = m => { const s = JSON.stringify(m); for (const c of NET.conns.values()) if (c.open) c.send(s); };
-    showLobby(); pushLobby(); msg('');
+    NET.map = api.getMap(); showLobby(); pushLobby(); msg('');
   });
   peer.on('connection', conn => {
     conn.on('open', () => { NET.conns.set(conn.peer, conn); lastSeen.set(conn.peer, performance.now()); });
@@ -84,15 +84,16 @@ function removeSlot(i) {
   if (s.type === 'human') { const c = NET.conns.get(s.id); if (c) { c.send(JSON.stringify({ t: 'kicked' })); setTimeout(() => c.close(), 200); } chat(`${s.name} 님을 내보냈습니다.`); }
   NET.slots[i] = null; pushLobby();
 }
-function pushLobby() {
-  for (const [pid, c] of NET.conns) if (c.open) c.send(JSON.stringify({ t: 'lobby', slots: NET.slots, you: slotOf(pid), code: NET.code }));
+export function pushLobby() {
+  if (NET.mode !== 'host') return;
+  for (const [pid, c] of NET.conns) if (c.open) c.send(JSON.stringify({ t: 'lobby', slots: NET.slots, you: slotOf(pid), code: NET.code, map: NET.map }));
   renderLobby();
 }
 function canStart() { const n = NET.slots.filter(Boolean).length; return n >= 2 && NET.slots.every(s => !s || s.ready); }
 function startRace() {
   if (!canStart()) return; NET.inRace = true;
   const slots = NET.slots.map(s => s && { type: s.type, name: s.name });
-  for (const [pid, c] of NET.conns) if (c.open) c.send(JSON.stringify({ t: 'start', slots, you: slotOf(pid) }));
+  for (const [pid, c] of NET.conns) if (c.open) c.send(JSON.stringify({ t: 'start', slots, you: slotOf(pid), map: NET.map }));
   hideMP(); api.startRace(slots, 0, 'host');
 }
 export function hostResults(rows) { NET.broadcast({ t: 'results', rows }); api.showResults(rows); setTimeout(backToLobby, 8000); }
@@ -115,11 +116,11 @@ async function joinRoom(code) {
   peer.on('error', e => { clearTimeout(to); msg(ERR[e.type] || ('연결 오류: ' + e.type), true); });
 }
 function guestRecv(m) {
-  if (m.t === 'lobby') { NET.slots = m.slots; NET.you = m.you; renderLobby(); }
+  if (m.t === 'lobby') { NET.slots = m.slots; NET.you = m.you; if (m.map) { NET.map = m.map; api.onMap(m.map); } renderLobby(); }
   else if (m.t === 'chat') addChat(m.text);
   else if (m.t === 'reject') { leave(m.msg); }
   else if (m.t === 'kicked') { leave('호스트가 당신을 방에서 내보냈습니다.'); }
-  else if (m.t === 'start') { NET.you = m.you; NET.inRace = true; hideMP(); api.startRace(m.slots, m.you, 'guest'); }
+  else if (m.t === 'start') { if (m.map) { NET.map = m.map; api.onMap(m.map); } NET.you = m.you; NET.inRace = true; hideMP(); api.startRace(m.slots, m.you, 'guest'); }
   else if (m.t === 'ping') {}
   else if (m.t === 'snap') api.onSnap(m);
   else if (m.t === 'say') api.onSay(m);
@@ -153,6 +154,7 @@ function renderLobby() {
   $('addBot').classList.toggle('hidden', !host); $('startRace').classList.toggle('hidden', !host); $('readyBtn').classList.toggle('hidden', host);
   $('addBot').disabled = !NET.slots.some(s => !s); $('startRace').disabled = !canStart();
   const me = NET.slots[NET.you]; $('readyBtn').textContent = me && me.ready ? '준비 취소' : '준비';
+  api.renderMaps();
   $('lobbyHint').textContent = host ? (canStart() ? '모두 준비되었습니다! 경주를 시작하세요.' : '참가자 2명 이상(봇 포함) + 모두 준비 시 시작할 수 있어요.') : '호스트가 경주를 시작할 때까지 기다려 주세요.';
 }
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
