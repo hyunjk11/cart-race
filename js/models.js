@@ -93,6 +93,7 @@ export function makeCart(color, charId, opt = {}) {
     t = 0;
   const api = {
     root,
+    cartG: cart, // the cart body (parts live here; root also holds the rider and transient effects)
     pose: null,
     get person() {
       return person;

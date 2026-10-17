@@ -2303,7 +2303,7 @@ if (DEBUG)
       let meshes = 0,
         verts = 0,
         cartVerts = 0;
-      const pr = c.g.person && c.g.person.root;
+      const cg = c.g.cartG;
       const mats = new Set();
       r.updateMatrixWorld(true);
       const box = new THREE.Box3();
@@ -2312,8 +2312,8 @@ if (DEBUG)
           meshes++;
           verts += o.geometry.attributes.position.count;
           let q = o;
-          while (q && q !== pr) q = q.parent;
-          if (!q) cartVerts += o.geometry.attributes.position.count;
+          while (q && q !== cg) q = q.parent;
+          if (q) cartVerts += o.geometry.attributes.position.count;
           mats.add(o.material.type + (o.material.color ? ':' + o.material.color.getHexString() : ''));
           box.expandByObject(o);
         }
