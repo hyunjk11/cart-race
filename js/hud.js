@@ -1,4 +1,7 @@
-// split out of main.js (no behavior change): shared main.js state is reached through G (getters/setters)
+/**
+ * hud.js — in-race HUD: flash messages, speech bubbles, PA announcer, minimap, spectator UI, standings/HUD text.
+ * Split out of main.js; shared state comes from state.js (S = mutable state, ctx = main.js objects/services).
+ */
 import * as THREE from 'three';
 import * as TR from './track.js';
 import { path, hAt, strips, tangentAt, LAPS } from './track.js';
@@ -6,44 +9,44 @@ import { charOf } from './chars.js';
 import { tutorialTick } from './help.js';
 import { ITEMS } from './fun.js';
 import { T_LIMIT, won } from './shop.js';
-let G = null;
-export const bind = g => {
-  G = g;
-};
+import { S, ctx } from './state.js';
+import { $, pick, stripTags } from './util.js';
+import { netSay } from './netglue.js';
+
 let MAXB, _v, mm, mctx, MW, MH, mmS, sx, sz, mmBg, annUntil, msgUntil;
 function flash(t) {
-  G.$('msg').textContent = t;
-  G.msgT = 1.5;
+  $('msg').textContent = t;
+  S.msgT = 1.5;
   msgUntil = Date.now() + 4000;
 }
 function say(ent, text, dur = 2, force = false) {
   const now = performance.now() / 1000;
   if (!force && (ent.sayCd || 0) > now) return;
-  if (G.MODE === 'host') G.netSay(ent, text, dur);
-  if (G.bubbles.length >= MAXB) {
+  if (S.MODE === 'host') netSay(ent, text, dur);
+  if (ctx.bubbles.length >= MAXB) {
     if (!force) return;
-    const old = G.bubbles.shift();
+    const old = ctx.bubbles.shift();
     old.el.remove();
   }
   const pos = ent.holder ? ent.holder.position : ent.g.root.position;
-  if (!force && pos.distanceTo(G.camera.position) > 30) return;
-  const ex = G.bubbles.find(b => b.ent === ent);
+  if (!force && pos.distanceTo(ctx.camera.position) > 30) return;
+  const ex = ctx.bubbles.find(b => b.ent === ent);
   if (ex) {
     ex.el.remove();
-    G.bubbles.splice(G.bubbles.indexOf(ex), 1);
+    ctx.bubbles.splice(ctx.bubbles.indexOf(ex), 1);
   }
   const el = document.createElement('div');
   el.className = 'bubble' + (ent.g && ent.g.root && !ent.holder ? ' cart' : '');
   el.textContent = text;
-  G.bubbleLayer.appendChild(el);
-  G.bubbles.push({ ent, el, t: 0, dur });
+  ctx.bubbleLayer.appendChild(el);
+  ctx.bubbles.push({ ent, el, t: 0, dur });
   ent.sayCd = now + dur + 2.5;
 }
 function chatter(cu) {
-  if (G.bubbles.length < 3)
+  if (ctx.bubbles.length < 3)
     say(
       cu,
-      G.pick([
+      pick([
         '두부가 어디 있더라…',
         '오늘 할인한대!',
         '우유 사야지~',
@@ -57,16 +60,16 @@ function chatter(cu) {
 }
 function updateBubbles() {
   const now = performance.now() / 1000;
-  for (let i = G.bubbles.length - 1; i >= 0; i--) {
-    const b = G.bubbles[i];
+  for (let i = ctx.bubbles.length - 1; i >= 0; i--) {
+    const b = ctx.bubbles[i];
     b.t += 1 / 60;
     if (b.t > b.dur) {
       b.el.remove();
-      G.bubbles.splice(i, 1);
+      ctx.bubbles.splice(i, 1);
       continue;
     }
     const p = b.ent.holder ? b.ent.holder.position : b.ent.g.root.position;
-    _v.set(p.x, b.ent.holder ? (b.ent.body ? p.y + 1.2 : p.y + 1.45) : p.y + 2.6, p.z).project(G.camera);
+    _v.set(p.x, b.ent.holder ? (b.ent.body ? p.y + 1.2 : p.y + 1.45) : p.y + 2.6, p.z).project(ctx.camera);
     if (_v.z > 1) {
       b.el.style.display = 'none';
       continue;
@@ -80,15 +83,15 @@ export function init0() {
   MAXB = 4;
   _v = new THREE.Vector3();
   setInterval(() => {
-    if (G.state !== 'race') return;
-    const sorted = [...G.carts].sort((a, b) => b.prog - a.prog);
-    for (const c of G.carts)
-      if (c.ai && Math.hypot(c.x - G.player.x, c.z - G.player.z) < 15 && Math.random() < 0.25)
+    if (S.state !== 'race') return;
+    const sorted = [...ctx.carts].sort((a, b) => b.prog - a.prog);
+    for (const c of ctx.carts)
+      if (c.ai && Math.hypot(c.x - S.player.x, c.z - S.player.z) < 15 && Math.random() < 0.25)
         say(
           c,
           sorted[0] === c
-            ? G.pick(['내가 1등이다!', '따라올 테면 따라와~', '느려 느려~'])
-            : G.pick(['어림없지!', '추월한다!', '비켜비켜!', '내 차례야!']),
+            ? pick(['내가 1등이다!', '따라올 테면 따라와~', '느려 느려~'])
+            : pick(['어림없지!', '추월한다!', '비켜비켜!', '내 차례야!']),
         );
   }, 1500);
 }
@@ -151,29 +154,29 @@ function setupMinimap() {
 function drawMinimap() {
   mctx.clearRect(0, 0, MW, MH);
   if (mmBg) mctx.drawImage(mmBg, 0, 0);
-  if (G.SHOPON() && G.state !== 'title')
-    for (const s of G.shop.spots)
-      if (G.shop.need(G.player, s.k) || s.sale > 0) {
+  if (ctx.SHOPON() && S.state !== 'title')
+    for (const s of S.shop.spots)
+      if (S.shop.need(S.player, s.k) || s.sale > 0) {
         mctx.fillStyle = s.sale > 0 ? '#ff1744' : '#ffee58';
         mctx.fillRect(sx(s.x) - 2.5, sz(s.z) - 2.5, 5, 5);
       }
-  for (const T of G.traffic) {
+  for (const T of ctx.traffic) {
     mctx.fillStyle = '#ff7043';
     mctx.fillRect(sx(T.x) - 2.5, sz(T.z) - 2.5, 5, 5);
   }
-  for (const cu of G.customers) {
+  for (const cu of ctx.customers) {
     const x = cu.body ? cu.body.position.x : cu.x,
       z = cu.body ? cu.body.position.z : cu.z;
     mctx.fillStyle = cu.state === 'walk' ? '#bbb' : '#f44';
     mctx.fillRect(sx(x) - 1, sz(z) - 1, 2, 2);
   }
-  for (const c of G.carts) {
+  for (const c of ctx.carts) {
     if (c.inactive) continue;
     mctx.fillStyle = '#' + c.color.toString(16).padStart(6, '0');
     mctx.beginPath();
-    mctx.arc(sx(c.x), sz(c.z), c === G.player ? 4.5 : 3.5, 0, 7);
+    mctx.arc(sx(c.x), sz(c.z), c === S.player ? 4.5 : 3.5, 0, 7);
     mctx.fill();
-    if (c === G.player) {
+    if (c === S.player) {
       mctx.strokeStyle = '#fff';
       mctx.lineWidth = 1.5;
       mctx.stroke();
@@ -184,13 +187,13 @@ function drawMinimap() {
   }
 }
 function announce(t) {
-  const el = G.$('event');
+  const el = $('event');
   el.textContent = '📢 ' + t;
   el.classList.add('show');
   annUntil = Date.now() + 3500;
 }
 export function init1() {
-  mm = G.$('minimap');
+  mm = $('minimap');
   mctx = mm.getContext('2d');
   MW = mm.width;
   MH = mm.height;
@@ -204,9 +207,9 @@ export function init1() {
     const now = Date.now();
     if (annUntil && now > annUntil) {
       annUntil = 0;
-      G.$('event').classList.remove('show');
+      $('event').classList.remove('show');
     }
-    const m = G.$('msg');
+    const m = $('msg');
     if (m.textContent && !msgUntil) msgUntil = now + 4000;
     if (!m.textContent) msgUntil = 0;
     else if (now > msgUntil) {
@@ -216,33 +219,33 @@ export function init1() {
   }, 250);
 }
 function specUi() {
-  if (!G.spec) return;
-  const c = G.specCart(),
-    sig = `${c.name}|${G.SHOPON() ? G.shop.got(c) + '/' + G.shop.S(c).list.length : ''}|${G.spec.ff}|${G.specList().length}`;
-  if (sig === G.specSig) return;
-  G.specSig = sig;
-  G.$('specName').textContent =
-    c === G.player
+  if (!S.spec) return;
+  const c = ctx.specCart(),
+    sig = `${c.name}|${ctx.SHOPON() ? S.shop.got(c) + '/' + S.shop.S(c).list.length : ''}|${S.spec.ff}|${ctx.specList().length}`;
+  if (sig === S.specSig) return;
+  S.specSig = sig;
+  $('specName').textContent =
+    c === S.player
       ? '👀 관전 중 · 모두 계산 완료!'
-      : `👀 관전 중: ${c.name}${G.SHOPON() ? ` (목록 ${G.shop.got(c)}/${G.shop.S(c).list.length})` : ''} · 남은 손님 ${G.specList().length}명`;
-  G.$('specFF').textContent = G.spec.ff ? '⏩ 빨리 감기 중… (x24)' : '⏩ 빨리 감기';
-  G.$('specFF').classList.toggle('on', G.spec.ff);
+      : `👀 관전 중: ${c.name}${ctx.SHOPON() ? ` (목록 ${S.shop.got(c)}/${S.shop.S(c).list.length})` : ''} · 남은 손님 ${ctx.specList().length}명`;
+  $('specFF').textContent = S.spec.ff ? '⏩ 빨리 감기 중… (x24)' : '⏩ 빨리 감기';
+  $('specFF').classList.toggle('on', S.spec.ff);
 }
 export function init2() {
-  G.$('specNext').onclick = e => {
+  $('specNext').onclick = e => {
     e.stopPropagation();
-    if (G.spec) {
-      G.spec.i++;
-      G.camPos.set(0, 0, 0);
-      G.specSig = '';
+    if (S.spec) {
+      S.spec.i++;
+      ctx.camPos.set(0, 0, 0);
+      S.specSig = '';
       specUi();
     }
   };
-  G.$('specFF').onclick = e => {
+  $('specFF').onclick = e => {
     e.stopPropagation();
-    if (G.spec && G.MODE === 'solo') {
-      G.spec.ff = !G.spec.ff;
-      G.specSig = '';
+    if (S.spec && S.MODE === 'solo') {
+      S.spec.ff = !S.spec.ff;
+      S.specSig = '';
       specUi();
     }
   };
@@ -250,83 +253,87 @@ export function init2() {
 function updateHud(dt) {
   // HUD
   {
-    const p = G.player;
-    const active = G.carts.filter(c => !c.inactive),
+    const p = S.player;
+    const active = ctx.carts.filter(c => !c.inactive),
       sorted = [...active].sort((a, b) => b.prog - a.prog);
-    G.$('time').textContent = G.fmt(G.state === 'finished' ? p.time : G.raceT);
-    G.$('lap').textContent = G.SHOPON()
-      ? `${G.shop.got(p)}/${G.shop.S(p).list.length}`
+    $('time').textContent = ctx.fmt(S.state === 'finished' ? p.time : S.raceT);
+    $('lap').textContent = ctx.SHOPON()
+      ? `${S.shop.got(p)}/${S.shop.S(p).list.length}`
       : `${Math.min(LAPS, Math.max(1, p.lap + 1))}/${LAPS}`;
     {
-      const b = G.getBest(TR.MAP_ID);
-      const t = b ? G.fmt(b) : '-';
-      if (G.$('best').textContent !== t) G.$('best').textContent = t;
+      const b = ctx.getBest(TR.MAP_ID);
+      const t = b ? ctx.fmt(b) : '-';
+      if ($('best').textContent !== t) $('best').textContent = t;
     }
-    G.$('rank').textContent =
-      `${(p.finished && G.finishOrder.includes(p) ? G.finishOrder.indexOf(p) : sorted.indexOf(p)) + 1}/${active.length}`;
+    $('rank').textContent =
+      `${(p.finished && ctx.finishOrder.includes(p) ? ctx.finishOrder.indexOf(p) : sorted.indexOf(p)) + 1}/${active.length}`;
     {
-      const ord = [...G.finishOrder.filter(c => !c.inactive), ...sorted.filter(c => !G.finishOrder.includes(c))],
+      const ord = [...ctx.finishOrder.filter(c => !c.inactive), ...sorted.filter(c => !ctx.finishOrder.includes(c))],
         sig = ord.map(c => c.char + c.name + (c === p)).join();
-      if (sig !== G.standSig) {
-        G.standSig = sig;
-        G.$('standings').innerHTML = ord
+      if (sig !== S.standSig) {
+        S.standSig = sig;
+        $('standings').innerHTML = ord
           .map(
             (c, i) =>
-              `<span class="${c === p ? 'me' : ''}" style="--c:#${c.color.toString(16).padStart(6, '0')}"><b>${i + 1}</b>${charOf(c.char).emoji}<em>${c === p ? '나' : G.esc(c.name.replace(/ ?\(봇\)| 봇$/, ''))}</em></span>`,
+              `<span class="${c === p ? 'me' : ''}" style="--c:#${c.color.toString(16).padStart(6, '0')}"><b>${i + 1}</b>${charOf(c.char).emoji}<em>${c === p ? '나' : stripTags(c.name.replace(/ ?\(봇\)| 봇$/, ''))}</em></span>`,
           )
           .join('');
       }
     }
-    tutorialTick({ state: G.state, raceT: G.raceT, touch: G.IS_TOUCH, shop: G.SHOPON(), n2o: p.n2o, item: p.item, riders: G.nRiders(p) });
-    G.$('speed').textContent = `${Math.round(Math.abs(p.v) * 3.6)} km/h`;
-    G.$('boostFill').style.width = `${p.gauge * 100}%`;
-    G.$('n2o').innerHTML = [0, 1].map(i => `<span class="slot ${i < p.n2o ? 'full' : ''}">N2O</span>`).join('');
-    G.$('itemSlot').innerHTML = p.item
+    tutorialTick({
+      state: S.state,
+      raceT: S.raceT,
+      touch: ctx.IS_TOUCH,
+      shop: ctx.SHOPON(),
+      n2o: p.n2o,
+      item: p.item,
+      riders: ctx.nRiders(p),
+    });
+    $('speed').textContent = `${Math.round(Math.abs(p.v) * 3.6)} km/h`;
+    $('boostFill').style.width = `${p.gauge * 100}%`;
+    $('n2o').innerHTML = [0, 1].map(i => `<span class="slot ${i < p.n2o ? 'full' : ''}">N2O</span>`).join('');
+    $('itemSlot').innerHTML = p.item
       ? `<span class="ic">${ITEMS[p.item].icon}</span><span>${ITEMS[p.item].name}</span>`
       : '<span class="ic">❔</span><span>아이템 없음</span>';
-    G.$('driftTxt').textContent = p.drifting
-      ? `드리프트!${p.combo > 0 ? ' x' + (p.combo + 1) : ''}`
-      : p.combo > 1
-        ? `콤보 x${p.combo}`
-        : '';
-    G.$('riders').textContent = G.nRiders(p) ? `🛒 탑승 손님 ${'🧍'.repeat(G.nRiders(p))} (-${G.nRiders(p) * 12}% 속도)` : '';
-    G.$('driftTxt').className = p.drifting ? 'on' : '';
-    G.$('chaos').textContent = G.chaos();
-    G.$('knocked').textContent = G.stats.knocked;
-    G.$('spilled').textContent = G.stats.spilled;
-    if (G.SHOPON()) {
-      G.shop.render(dt, G.player);
+    $('driftTxt').textContent = p.drifting ? `드리프트!${p.combo > 0 ? ' x' + (p.combo + 1) : ''}` : p.combo > 1 ? `콤보 x${p.combo}` : '';
+    $('riders').textContent = ctx.nRiders(p) ? `🛒 탑승 손님 ${'🧍'.repeat(ctx.nRiders(p))} (-${ctx.nRiders(p) * 12}% 속도)` : '';
+    $('driftTxt').className = p.drifting ? 'on' : '';
+    $('chaos').textContent = ctx.chaos();
+    $('knocked').textContent = ctx.stats.knocked;
+    $('spilled').textContent = ctx.stats.spilled;
+    if (ctx.SHOPON()) {
+      S.shop.render(dt, S.player);
       shopHud();
     }
   }
 }
 function shopHud() {
-  const p = G.player,
-    S = G.shop.S(p),
-    sale = new Set(G.shop.spots.filter(s => s.sale > 0).map(s => s.k));
-  const rows = S.list
+  const p = S.player,
+    ps = S.shop.S(p),
+    sale = new Set(S.shop.spots.filter(s => s.sale > 0).map(s => s.k));
+  const rows = ps.list
     .map(k => {
-      const g = G.shop.GOODS[G.shop.GI[k]],
-        ok = G.shop.has(p, k),
-        br = S.items.some(it => it.k === k && it.broken);
+      const g = S.shop.GOODS[S.shop.GI[k]],
+        ok = S.shop.has(p, k),
+        br = ps.items.some(it => it.k === k && it.broken);
       return `<div class="${ok ? 'ok' : ''}">${ok ? '✅' : br ? '💔' : '⬜'} ${g.i} ${g.n}${!ok && sale.has(k) ? ' <em>🏷️할인</em>' : ''}</div>`;
     })
     .join('');
-  const sc = G.shop.score(p, -1, false, 0),
-    money = S.items.filter(it => !it.broken).reduce((a, it) => a + G.shop.GOODS[G.shop.GI[it.k]].p * (it.sale ? 0.7 : 1), 0);
-  const left = G.TLIM ? Math.max(0, T_LIMIT - (G.state === 'countdown' ? 0 : G.raceT)) : null;
-  const sum = `<div>🧺 ${S.items.length}개 · ${won(money)}</div><div>⭐ ${sc.score.toLocaleString('ko-KR')}점</div>${left != null ? `<div class="${left < 30 ? 'warn' : ''}">⏳ ${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}</div>` : ''}${G.shop.complete(p) && !p.finished ? '<div class="go">🧾 계산대로 GO!</div>' : ''}`;
+  const sc = S.shop.score(p, -1, false, 0),
+    money = ps.items.filter(it => !it.broken).reduce((a, it) => a + S.shop.GOODS[S.shop.GI[it.k]].p * (it.sale ? 0.7 : 1), 0);
+  const left = S.TLIM ? Math.max(0, T_LIMIT - (S.state === 'countdown' ? 0 : S.raceT)) : null;
+  const sum = `<div>🧺 ${ps.items.length}개 · ${won(money)}</div><div>⭐ ${sc.score.toLocaleString('ko-KR')}점</div>${left != null ? `<div class="${left < 30 ? 'warn' : ''}">⏳ ${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}</div>` : ''}${S.shop.complete(p) && !p.finished ? '<div class="go">🧾 계산대로 GO!</div>' : ''}`;
   const sig = rows + sum;
-  if (sig !== G.shopHudSig) {
-    G.shopHudSig = sig;
-    G.$('shopList').innerHTML = rows;
-    G.$('shopSum').innerHTML = sum;
+  if (sig !== S.shopHudSig) {
+    S.shopHudSig = sig;
+    $('shopList').innerHTML = rows;
+    $('shopSum').innerHTML = sum;
   }
 }
 function updCharBtns() {
-  const d = charOf(G.MYCHAR);
+  const d = charOf(S.MYCHAR);
   for (const id of ['charBtn', 'lobbyChar']) {
-    const b = G.$(id);
+    const b = $(id);
     if (b) b.innerHTML = `${d.emoji} <b>${d.name}</b> · 캐릭터 선택 ▸`;
   }
 }

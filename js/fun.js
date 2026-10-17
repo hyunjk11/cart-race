@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import * as TR from './track.js';
-const { hAt, atLane: tAtLane, straightAt } = TR;
+import { hAt, atLane as tAtLane, straightAt } from './track.js';
 import { makeCart } from './models.js';
 import { lm } from './util.js';
 

@@ -1,4 +1,7 @@
-// split out of main.js (no behavior change): multiplayer glue (host snapshots, guest prediction/mirroring, remote carts, MP race end); shared main.js state is reached through G (getters/setters)
+/**
+ * netglue.js — multiplayer glue between net.js and the race: host snapshots, guest prediction/mirroring,
+ * remote carts, speech/customer sync, MP race end. Split out of main.js; shared state comes from state.js (S, ctx).
+ */
 import { NET, hostResults, initNet } from './net.js';
 import * as THREE from 'three';
 import { flash, say } from './hud.js';
@@ -8,80 +11,79 @@ import { hAt } from './track.js';
 import { sound } from './audio.js';
 import { T_LIMIT } from './shop.js';
 import { shopRows, showResults, toLobby, leftRoom } from './results.js';
-let G = null;
-export const bind = g => {
-  G = g;
-};
+import { S, ctx } from './state.js';
+import { $, r2, pick } from './util.js';
+
 function onRemoteState(i, s) {
-  const c = G.carts[i];
+  const c = ctx.carts[i];
   if (c && c.remote) c.rs = s;
 }
 function onRemoteItem(i) {
-  const c = G.carts[i];
+  const c = ctx.carts[i];
   if (c && c.remote) c.useItem = true;
 }
 function onSpawn(a) {
-  if (G.MODE === 'host' && G.products.length < G.MAXP + 20) G.spawnProduct(...a.slice(0, 6).map(Number));
+  if (S.MODE === 'host' && ctx.products.length < ctx.MAXP + 20) ctx.spawnProduct(...a.slice(0, 6).map(Number));
 }
 function slotToBot(i) {
-  const c = G.carts[i];
+  const c = ctx.carts[i];
   if (!c) return;
   c.remote = false;
   c.ai = true;
   c.name += ' (봇)';
-  G.nameTag(c, c.name);
-  NET.broadcast({ t: 'slots', names: G.carts.map(c => c.name) });
+  ctx.nameTag(c, c.name);
+  NET.broadcast({ t: 'slots', names: ctx.carts.map(c => c.name) });
 }
 // rejoin (E2): a dropped guest came back with its room token -> the replacement bot hands the cart back
 function slotToHuman(i, name) {
-  const c = G.carts[i];
+  const c = ctx.carts[i];
   if (!c) return;
   c.ai = false;
   c.remote = true;
   c.rs = null;
   c.name = name;
-  G.nameTag(c, name);
-  NET.broadcast({ t: 'slots', names: G.carts.map(c => c.name) });
+  ctx.nameTag(c, name);
+  NET.broadcast({ t: 'slots', names: ctx.carts.map(c => c.name) });
 }
 const REJOIN_KEYS = ['x', 'z', 'h', 'vd', 'v', 'lap', 'idx', 'prog', 'finished', 'time', 'lapT0', 'laps', 'n2o', 'gauge', 'item'];
 function rejoinState(i) {
-  const c = G.carts[i],
+  const c = ctx.carts[i],
     me = {};
   for (const k of REJOIN_KEYS) me[k] = c[k];
-  return { raceT: G.raceT, state: G.state, me };
+  return { raceT: S.raceT, state: S.state, me };
 }
 // guest side: jump straight into the running race (no countdown/intro); late joiners only watch
 function rejoinRace(r) {
   if (r.state !== 'countdown') {
-    G.state = 'race';
-    G.cd = 0;
-    G.showIntro(false);
-    G.$('countdown').textContent = '';
+    S.state = 'race';
+    S.cd = 0;
+    ctx.showIntro(false);
+    $('countdown').textContent = '';
   }
-  G.raceT = +r.raceT || 0;
+  S.raceT = +r.raceT || 0;
   if (r.spec) {
-    G.startSpectate();
+    ctx.startSpectate();
     flash('👀 경주가 진행 중이에요 — 관전하다가 다음 경주부터 참가합니다');
-    G.msgT = 5;
+    S.msgT = 5;
     return;
   }
   if (r.me) {
-    Object.assign(G.player, r.me);
-    G.player.rs = null;
+    Object.assign(S.player, r.me);
+    S.player.rs = null;
   }
   flash('📡 다시 연결되었습니다! 경주를 이어서 달려요');
-  G.msgT = 3;
+  S.msgT = 3;
 }
 function netNote(t) {
   flash(t);
-  G.msgT = 3;
+  S.msgT = 3;
 }
 function onSlots(m) {
   (m.names || []).forEach((n, i) => {
-    const c = G.carts[i];
-    if (c && c !== G.player && !c.inactive && c.name !== n) {
+    const c = ctx.carts[i];
+    if (c && c !== S.player && !c.inactive && c.name !== n) {
       c.name = n;
-      G.nameTag(c, n);
+      ctx.nameTag(c, n);
     }
   });
 }
@@ -102,19 +104,19 @@ export function applyRemote(c, dt) {
   if (s[9] && !c.finished) {
     c.finished = true;
     c.time = s[10];
-    G.finishOrder.push(c);
+    ctx.finishOrder.push(c);
   }
-  c.prog = c.finished ? 1e6 - c.time : c.lap * G.N + c.idx;
-  if (c.drifting && Math.abs(c.slip) > 0.75 && (s[12] || 0) > 0.8 && c.riders && c.riders.length) G.hopOut(c, 'drift');
+  c.prog = c.finished ? 1e6 - c.time : c.lap * S.N + c.idx;
+  if (c.drifting && Math.abs(c.slip) > 0.75 && (s[12] || 0) > 0.8 && c.riders && c.riders.length) ctx.hopOut(c, 'drift');
   if (c.magnetT > 0 && c.magTarget) {
     /* guest applies the pull locally from the snapshot */
   }
 }
 function onRemoteCrash(i, k) {
-  const c = G.carts[i];
+  const c = ctx.carts[i];
   if (!c || !c.remote) return;
-  if (c.riders && c.riders.length) G.hopOut(c, 'crash');
-  if (G.SHOPON() && k > 7 && G.state === 'race') G.shop.crash(c, k);
+  if (c.riders && c.riders.length) ctx.hopOut(c, 'crash');
+  if (ctx.SHOPON() && k > 7 && S.state === 'race') S.shop.crash(c, k);
 }
 export function netFollow(c, dt) {
   const s = c.ns;
@@ -126,7 +128,7 @@ export function netFollow(c, dt) {
   }
   c.x += (s[0] - c.x) * k;
   c.z += (s[1] - c.z) * k;
-  c.h += G.ang(s[2] - c.h) * k;
+  c.h += ctx.ang(s[2] - c.h) * k;
   c.vd = s[3];
   c.v = s[4];
   c.drifting = !!s[5];
@@ -140,102 +142,102 @@ export function netFollow(c, dt) {
   c.riderN = s[14];
 }
 function makeSnap(full) {
-  const S = Object.assign(
+  const snap = Object.assign(
     {
       t: 'snap',
-      c: G.carts.map(c =>
+      c: ctx.carts.map(c =>
         c.inactive
           ? null
           : [
-              G.r2(c.x),
-              G.r2(c.z),
-              G.r2(c.h),
-              G.r2(c.vd),
-              G.r2(c.v),
+              r2(c.x),
+              r2(c.z),
+              r2(c.h),
+              r2(c.vd),
+              r2(c.v),
               c.drifting ? 1 : 0,
-              G.r2(c.slip || 0),
+              r2(c.slip || 0),
               c.lap,
               c.idx,
               Math.round(c.prog),
               c.finished ? 1 : 0,
-              G.r2(c.time),
+              r2(c.time),
               c.item,
               c.shieldT > 0 ? 1 : 0,
-              G.nRiders(c),
+              ctx.nRiders(c),
               c.hitSeq || 0,
-              c.magnetT > 0 && c.magTarget ? G.carts.indexOf(c.magTarget) : -1,
-              G.r2(c.slipT || 0),
+              c.magnetT > 0 && c.magTarget ? ctx.carts.indexOf(c.magTarget) : -1,
+              r2(c.slipT || 0),
             ],
       ),
-      cu: G.customers.map(cu => {
+      cu: ctx.customers.map(cu => {
         const p = cu.holder.position,
           q = cu.holder.quaternion;
         return [
-          G.r2(p.x),
-          G.r2(p.y),
-          G.r2(p.z),
-          G.r2(q.x),
-          G.r2(q.y),
-          G.r2(q.z),
-          G.r2(q.w),
-          G.CU_ST.indexOf(cu.state),
-          cu.state === 'ride' ? G.carts.indexOf(cu.cart) : -1,
+          r2(p.x),
+          r2(p.y),
+          r2(p.z),
+          r2(q.x),
+          r2(q.y),
+          r2(q.z),
+          r2(q.w),
+          ctx.CU_ST.indexOf(cu.state),
+          cu.state === 'ride' ? ctx.carts.indexOf(cu.cart) : -1,
           cu.seat || 0,
         ];
       }),
     },
-    G.fun.snap(),
+    S.fun.snap(),
   );
   if (full)
-    S.pr = G.products.map(p => {
+    snap.pr = ctx.products.map(p => {
       const b = p.body;
       return [
         p.k,
-        G.r2(b.position.x),
-        G.r2(b.position.y),
-        G.r2(b.position.z),
-        G.r2(b.quaternion.x),
-        G.r2(b.quaternion.y),
-        G.r2(b.quaternion.z),
-        G.r2(b.quaternion.w),
+        r2(b.position.x),
+        r2(b.position.y),
+        r2(b.position.z),
+        r2(b.quaternion.x),
+        r2(b.quaternion.y),
+        r2(b.quaternion.z),
+        r2(b.quaternion.w),
       ];
     });
-  else delete S.pp;
-  if (G.SHOPON()) S.sh = G.shop.snap();
-  return S;
+  else delete snap.pp;
+  if (ctx.SHOPON()) snap.sh = S.shop.snap();
+  return snap;
 }
 export const mirror = [];
 function onSnap(m) {
-  if (G.MODE !== 'guest') return;
+  if (S.MODE !== 'guest') return;
   m.c.forEach((a, i) => {
-    const c = G.carts[i];
+    const c = ctx.carts[i];
     if (!a || !c) return;
-    if (c === G.player) {
-      G.player.item = a[12];
-      G.player.shieldT = a[13] ? 1 : 0;
-      G.player.riderN = a[14];
-      if (a[16] >= 0 && G.carts[a[16]]) {
-        G.player.magnetT = 0.3;
-        G.player.magTarget = G.carts[a[16]];
+    if (c === S.player) {
+      S.player.item = a[12];
+      S.player.shieldT = a[13] ? 1 : 0;
+      S.player.riderN = a[14];
+      if (a[16] >= 0 && ctx.carts[a[16]]) {
+        S.player.magnetT = 0.3;
+        S.player.magTarget = ctx.carts[a[16]];
       }
-      if (a[17] > 0) G.player.slipT = Math.max(G.player.slipT || 0, a[17]);
-      if (a[15] > (G.player.hitSeqSeen || 0)) {
-        G.player.hitSeqSeen = a[15];
-        if (performance.now() - (G.player.predHitAt || 0) > 1200) guestHit();
+      if (a[17] > 0) S.player.slipT = Math.max(S.player.slipT || 0, a[17]);
+      if (a[15] > (S.player.hitSeqSeen || 0)) {
+        S.player.hitSeqSeen = a[15];
+        if (performance.now() - (S.player.predHitAt || 0) > 1200) guestHit();
       }
     } else c.ns = a;
   });
   m.cu.forEach((a, i) => {
-    if (G.customers[i]) G.customers[i].nt = a;
+    if (ctx.customers[i]) ctx.customers[i].nt = a;
   });
   if (m.pr) {
     m.pr.forEach((a, i) => {
       let mm = mirror[i];
-      const K = G.PKINDS[a[0]] || G.PKINDS[0];
+      const K = ctx.PKINDS[a[0]] || ctx.PKINDS[0];
       if (!mm || mm.k !== a[0]) {
-        if (mm) G.scene.remove(mm.mesh);
-        mm = mirror[i] = { k: a[0], mesh: new THREE.Mesh(K.g, K.m || G.pMats[i % G.pMats.length]) };
-        G.scene.add(mm.mesh);
+        if (mm) ctx.scene.remove(mm.mesh);
+        mm = mirror[i] = { k: a[0], mesh: new THREE.Mesh(K.g, K.m || ctx.pMats[i % ctx.pMats.length]) };
+        ctx.scene.add(mm.mesh);
       }
       mm.mesh.visible = true;
       mm.mesh.position.set(a[1], a[2], a[3]);
@@ -243,13 +245,13 @@ function onSnap(m) {
     });
     for (let i = m.pr.length; i < mirror.length; i++) mirror[i].mesh.visible = false;
   }
-  G.fun.applySnap(m);
-  if (m.sh && G.shop) G.shop.applySnap(m.sh);
+  S.fun.applySnap(m);
+  if (m.sh && S.shop) S.shop.applySnap(m.sh);
 }
 const _q = new THREE.Quaternion();
 export function guestCustomers(dt) {
   const k = Math.min(1, dt * 10);
-  for (const cu of G.customers) {
+  for (const cu of ctx.customers) {
     const a = cu.nt;
     if (!a) continue;
     const h = cu.holder,
@@ -261,11 +263,11 @@ export function guestCustomers(dt) {
       h.position.y += (a[1] - h.position.y) * k;
       h.position.z += (a[2] - oz) * k;
     }
-    cu.state = G.CU_ST[a[7]] || 'walk';
-    if (cu.state === 'ride' && G.carts[a[8]]) {
-      const c = G.carts[a[8]];
+    cu.state = ctx.CU_ST[a[7]] || 'walk';
+    if (cu.state === 'ride' && ctx.carts[a[8]]) {
+      const c = ctx.carts[a[8]];
       cu.t = (cu.t || 0) + dt;
-      G.ridePose(cu, c, a[9], Math.max(1, G.nRiders(c)));
+      ctx.ridePose(cu, c, a[9], Math.max(1, ctx.nRiders(c)));
       cu.x = h.position.x;
       cu.z = h.position.z;
       continue;
@@ -281,21 +283,21 @@ export function guestCustomers(dt) {
   }
 }
 function guestHit() {
-  const p = G.player;
+  const p = S.player;
   p.spin = 1.1;
   p.v *= 0.35;
   p.drifting = false;
-  G.shake = 0.7;
+  S.shake = 0.7;
   flash('당했다! 🌀');
-  FX.comic(p.x, 2 + hAt(p.x, p.z), p.z, G.pick(['POW!', '퍽!', '빙글~']), '#ff4081');
+  FX.comic(p.x, 2 + hAt(p.x, p.z), p.z, pick(['POW!', '퍽!', '빙글~']), '#ff4081');
   FX.screenFlash('#fff', 0.45);
   sound.bump(1);
-  G.puff(p.x, 0.8, p.z, 0xffffff, 6);
+  ctx.puff(p.x, 0.8, p.z, 0xffffff, 6);
 }
 export function guestBumps(c) {
-  if (c !== G.player) return;
+  if (c !== S.player) return;
   // effects the host can't apply to a locally-predicted cart: predicted banana spin, wet signs, fallen customers, VIP/forklift, loose products
-  for (const h of G.fun.hazards) {
+  for (const h of S.fun.hazards) {
     const d = Math.hypot(c.x - h.x, c.z - h.z);
     if (h.type === 'banana' && d < h.r + 0.4 && !h.gone && h.arm <= 0) {
       h.gone = true;
@@ -314,23 +316,23 @@ export function guestBumps(c) {
       NET.send({ t: 'hz', id: h.id });
       h.mesh.visible = false;
       c.v *= 0.55;
-      G.puff(h.x, 0.6, h.z, 0xffd600, 5);
+      ctx.puff(h.x, 0.6, h.z, 0xffd600, 5);
       sound.bump(0.8);
-      G.shake = Math.max(G.shake, 0.3);
+      S.shake = Math.max(S.shake, 0.3);
     }
   }
-  for (const cu of G.customers)
-    if ((cu.state === 'down' || cu.state === 'rise') && G.circlePush(c, cu.holder.position.x, cu.holder.position.z, 1.7, 0.9)) {
+  for (const cu of ctx.customers)
+    if ((cu.state === 'down' || cu.state === 'rise') && ctx.circlePush(c, cu.holder.position.x, cu.holder.position.z, 1.7, 0.9)) {
     }
-  const E = G.fun.ev;
-  if (E.vip) G.circlePush(c, E.vip.x, E.vip.z, 3.4, 0.9);
-  if (E.fork && E.forkT) G.circlePush(c, E.forkT[0], E.forkT[1], 2.2, 0.6);
+  const E = S.fun.ev;
+  if (E.vip) ctx.circlePush(c, E.vip.x, E.vip.z, 3.4, 0.9);
+  if (E.fork && E.forkT) ctx.circlePush(c, E.forkT[0], E.forkT[1], 2.2, 0.6);
   for (const m of mirror)
     if (m.mesh.visible) {
       const b = m.mesh.position;
       if (b.y - hAt(b.x, b.z) < 0.6 && Math.abs(b.x - c.x) < 1.4 && Math.abs(b.z - c.z) < 1.4) c.v *= 0.993;
     }
-  for (const cu of G.customers)
+  for (const cu of ctx.customers)
     if (cu.state === 'walk' && Math.hypot(c.x - cu.x, c.z - cu.z) < 1.3 && (c.bump || 0) <= 0) {
       c.v *= Math.abs(c.v) > 9 ? 0.75 : 0.5;
       c.bump = 0.6;
@@ -338,91 +340,91 @@ export function guestBumps(c) {
     }
 }
 function onSay(m) {
-  const ent = m.k === 'u' ? G.customers[m.i] : G.carts[m.i];
+  const ent = m.k === 'u' ? ctx.customers[m.i] : ctx.carts[m.i];
   if (ent && !ent.inactive) say(ent, m.text, m.dur, true);
 }
 export function netSay(ent, text, dur) {
-  const i = G.customers.indexOf(ent),
-    j = G.carts.indexOf(ent);
+  const i = ctx.customers.indexOf(ent),
+    j = ctx.carts.indexOf(ent);
   if (i >= 0) NET.broadcast({ t: 'say', k: 'u', i, text, dur });
   else if (j >= 0) NET.broadcast({ t: 'say', k: 'c', i: j, text, dur });
 }
 function myState() {
-  const c = G.player;
+  const c = S.player;
   return [
-    G.r2(c.x),
-    G.r2(c.z),
-    G.r2(c.h),
-    G.r2(c.vd),
-    G.r2(c.v),
+    r2(c.x),
+    r2(c.z),
+    r2(c.h),
+    r2(c.vd),
+    r2(c.v),
     c.drifting ? 1 : 0,
-    G.r2(c.slip || 0),
+    r2(c.slip || 0),
     c.lap,
     c.idx,
     c.finished ? 1 : 0,
-    G.r2(c.time),
+    r2(c.time),
     c.steerIn || 0,
-    G.r2(c.driftT || 0),
+    r2(c.driftT || 0),
   ];
 }
 export function mpFinish() {
   flash('🏁 완주! 다른 참가자를 기다리는 중…');
-  G.msgT = 6;
-  G.startCut(G.finishOrder[0] && !G.finishOrder[0].inactive ? G.finishOrder[0] : G.player);
+  S.msgT = 6;
+  ctx.startCut(ctx.finishOrder[0] && !ctx.finishOrder[0].inactive ? ctx.finishOrder[0] : S.player);
 }
 export function mpTick(dt) {
-  if (G.MODE === 'host' && (G.state === 'countdown' || G.state === 'race')) {
-    G.netAcc += dt;
-    if (G.netAcc >= 1 / 15) {
-      G.netAcc = 0;
-      G.snapN++;
-      NET.broadcast(makeSnap(G.snapN % 3 === 0));
+  if (S.MODE === 'host' && (S.state === 'countdown' || S.state === 'race')) {
+    S.netAcc += dt;
+    if (S.netAcc >= 1 / 15) {
+      S.netAcc = 0;
+      S.snapN++;
+      NET.broadcast(makeSnap(S.snapN % 3 === 0));
     }
-    if (G.state === 'race' && !G.mpDone) {
-      const humans = G.carts.filter(c => !c.inactive && (c === G.player || c.remote));
-      if (!G.firstFinT && G.carts.some(c => !c.inactive && c.finished)) G.firstFinT = G.raceT;
-      const allDone = G.carts.every(c => c.inactive || c.finished);
+    if (S.state === 'race' && !S.mpDone) {
+      const humans = ctx.carts.filter(c => !c.inactive && (c === S.player || c.remote));
+      if (!S.firstFinT && ctx.carts.some(c => !c.inactive && c.finished)) S.firstFinT = S.raceT;
+      const allDone = ctx.carts.every(c => c.inactive || c.finished);
       if (
-        G.SHOPON()
-          ? allDone || (G.firstFinT && G.raceT - G.firstFinT > 45) || (G.TLIM && G.raceT >= T_LIMIT)
-          : humans.every(c => c.finished) || (G.firstFinT && G.raceT - G.firstFinT > 30)
+        ctx.SHOPON()
+          ? allDone || (S.firstFinT && S.raceT - S.firstFinT > 45) || (S.TLIM && S.raceT >= T_LIMIT)
+          : humans.every(c => c.finished) || (S.firstFinT && S.raceT - S.firstFinT > 30)
       ) {
-        G.mpDone = true;
-        const act = G.carts.filter(c => !c.inactive);
-        const order = [...G.finishOrder.filter(c => !c.inactive), ...act.filter(c => !c.finished).sort((a, b) => b.prog - a.prog)];
-        if (G.SHOPON()) hostResults(shopRows().map(r => ({ name: r.name, time: r.time, bot: r.bot, i: r.i, score: r.score, rc: r.rc })));
+        S.mpDone = true;
+        const act = ctx.carts.filter(c => !c.inactive);
+        const order = [...ctx.finishOrder.filter(c => !c.inactive), ...act.filter(c => !c.finished).sort((a, b) => b.prog - a.prog)];
+        if (ctx.SHOPON()) hostResults(shopRows().map(r => ({ name: r.name, time: r.time, bot: r.bot, i: r.i, score: r.score, rc: r.rc })));
         else hostResults(order.map(c => ({ name: c.name, time: c.finished ? c.time : null, bot: !!c.ai })));
       }
     }
   }
-  if (G.MODE === 'guest' && (G.state === 'countdown' || G.state === 'race')) {
-    G.netAcc += dt;
-    if (G.netAcc >= 0.05) {
-      G.netAcc = 0;
+  if (S.MODE === 'guest' && (S.state === 'countdown' || S.state === 'race')) {
+    S.netAcc += dt;
+    if (S.netAcc >= 0.05) {
+      S.netAcc = 0;
       NET.send({ t: 'st', s: myState() });
     }
-    if (G.player.useItem) {
-      G.player.useItem = false;
-      if (G.player.item || (G.SHOPON() && G.shop.nearest(G.player, 3.0))) NET.send({ t: 'item' });
+    if (S.player.useItem) {
+      S.player.useItem = false;
+      if (S.player.item || (ctx.SHOPON() && S.shop.nearest(S.player, 3.0))) NET.send({ t: 'item' });
     }
   }
 }
 
 export function init() {
   initNet({
-    getChar: () => G.MYCHAR,
-    getOpts: () => G.optsNow(),
-    onOpts: G.onOpts,
+    getChar: () => S.MYCHAR,
+    getOpts: () => ctx.optsNow(),
+    onOpts: ctx.onOpts,
     getMap: () => TR.MAP_ID,
     onMap: id => {
-      if (id !== TR.MAP_ID) G.loadMap(id);
+      if (id !== TR.MAP_ID) ctx.loadMap(id);
     },
-    renderMaps: () => G.renderMaps(),
+    renderMaps: () => ctx.renderMaps(),
     onRemoteHazard: (i, id, sh) => {
-      const c = G.carts[i];
-      if (c && c.remote) G.fun.remoteHazardHit(c, id, sh);
+      const c = ctx.carts[i];
+      if (c && c.remote) S.fun.remoteHazardHit(c, id, sh);
     },
-    startRace: G.startRaceMP,
+    startRace: ctx.startRaceMP,
     onRemoteState,
     onRemoteCrash,
     onRemoteItem,
@@ -439,7 +441,7 @@ export function init() {
     toLobby,
     leftRoom,
     onMenu: open => {
-      if (G.state === 'title' || G.state === 'lobby') G.state = open ? 'lobby' : 'title';
+      if (S.state === 'title' || S.state === 'lobby') S.state = open ? 'lobby' : 'title';
     },
   });
 }

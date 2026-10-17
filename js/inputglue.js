@@ -1,41 +1,44 @@
-// split out of main.js (no behavior change): shared main.js state is reached through G (getters/setters)
+/**
+ * inputglue.js — connects input.js/help.js/audio.js to the game: start button, item/N2O key edges, mute and
+ * auto-accelerate buttons. init0/1/2 are called by main.js at fixed points during startup.
+ * Split out of main.js; shared state comes from state.js (S, ctx).
+ */
 import { isHelpOpen, maybeShopTutorial, initHelp } from './help.js';
 import { initAudio, suspendAudio, isMuted, onMuteChange, setMuted } from './audio.js';
 import { LS } from './store.js';
 import { initInput } from './input.js';
 import { flash } from './hud.js';
-let G = null;
-export const bind = g => {
-  G = g;
-};
+import { S, ctx } from './state.js';
+import { $ } from './util.js';
+
 let pressEdge, unlock, muteBtn, showMute, SCROLLABLE, autoBtn, showAuto;
 function startGame() {
   initAudio();
-  if (G.GMODE === 'shop' && G.state === 'title' && G.MODE === 'solo' && LS.get('cartTutShop') !== '1') {
+  if (S.GMODE === 'shop' && S.state === 'title' && S.MODE === 'solo' && LS.get('cartTutShop') !== '1') {
     maybeShopTutorial(startGame);
     return;
   }
-  G.$('title').classList.add('hidden');
-  if ((G.state === 'title' || G.state === 'lobby') && G.MODE === 'solo') G.startRaceMP(G.SOLO_SLOTS(), 0, 'solo');
+  $('title').classList.add('hidden');
+  if ((S.state === 'title' || S.state === 'lobby') && S.MODE === 'solo') ctx.startRaceMP(ctx.SOLO_SLOTS(), 0, 'solo');
 }
 export function init0() {
   pressEdge = k => {
-    if (k === 'Space') G.player.useN2O = true;
-    if (k === 'KeyE' || k === 'ControlLeft' || k === 'ControlRight' || k === 'Item') G.player.useItem = true;
+    if (k === 'Space') S.player.useN2O = true;
+    if (k === 'KeyE' || k === 'ControlLeft' || k === 'ControlRight' || k === 'Item') S.player.useItem = true;
   };
   addEventListener('keydown', e => {
-    if (e.code === 'KeyR' && G.MODE === 'solo' && !e.target.closest?.('input,select') && !isHelpOpen()) location.reload();
+    if (e.code === 'KeyR' && S.MODE === 'solo' && !e.target.closest?.('input,select') && !isHelpOpen()) location.reload();
   });
-  G.$('restart').onclick = () => location.reload();
-  G.$('startBtn').addEventListener('click', startGame);
-  G.$('quality').value = G.QUALITY;
-  G.$('quality').addEventListener('change', e => {
+  $('restart').onclick = () => location.reload();
+  $('startBtn').addEventListener('click', startGame);
+  $('quality').value = ctx.QUALITY;
+  $('quality').addEventListener('change', e => {
     LS.set('cartQuality', e.target.value);
     location.reload();
   });
-  G.$('quality').addEventListener('keydown', e => e.stopPropagation());
+  $('quality').addEventListener('keydown', e => e.stopPropagation());
   addEventListener('keydown', e => {
-    if (G.state === 'title' && !G.$('title').classList.contains('hidden') && (e.code === 'Enter' || e.code === 'Space')) startGame();
+    if (S.state === 'title' && !$('title').classList.contains('hidden') && (e.code === 'Enter' || e.code === 'Space')) startGame();
   });
   unlock = () => initAudio();
   ['pointerdown', 'keydown', 'touchstart', 'touchend', 'click'].forEach(ev => addEventListener(ev, unlock, { passive: true }));
@@ -43,10 +46,10 @@ export function init0() {
     if (document.hidden) suspendAudio();
     else {
       initAudio();
-      G.last = performance.now();
+      S.last = performance.now();
     }
   });
-  muteBtn = G.$('mute');
+  muteBtn = $('mute');
   showMute = m => (muteBtn.textContent = m ? '🔇' : '🔊');
   showMute(isMuted());
   onMuteChange(showMute);
@@ -60,8 +63,8 @@ export function init0() {
   });
 }
 export function init1() {
-  if (G.IS_TOUCH) document.body.classList.add('touch');
-  initInput({ pressEdge, touch: G.IS_TOUCH });
+  if (ctx.IS_TOUCH) document.body.classList.add('touch');
+  initInput({ pressEdge, touch: ctx.IS_TOUCH });
   SCROLLABLE = '#title,#mp,#charSel,#finish,.scrolly';
   ['touchmove', 'gesturestart', 'dblclick'].forEach(ev =>
     document.addEventListener(
@@ -77,29 +80,29 @@ export function init1() {
   );
 }
 export function init2() {
-  autoBtn = G.$('auto');
-  showAuto = () => (autoBtn.textContent = G.autoAccel ? '자동가속 ON' : '자동가속 OFF');
+  autoBtn = $('auto');
+  showAuto = () => (autoBtn.textContent = S.autoAccel ? '자동가속 ON' : '자동가속 OFF');
   showAuto();
   autoBtn.addEventListener('pointerdown', e => {
     e.stopPropagation();
-    G.autoAccel = !G.autoAccel;
-    LS.set('cartAuto', G.autoAccel ? '1' : '0');
+    S.autoAccel = !S.autoAccel;
+    LS.set('cartAuto', S.autoAccel ? '1' : '0');
     showAuto();
   });
   addEventListener('keydown', e => {
     if (e.code === 'KeyT' && !e.repeat && !e.target.closest?.('input,select')) autoBtn.dispatchEvent(new PointerEvent('pointerdown'));
   });
   initHelp({
-    isTouch: () => G.IS_TOUCH,
-    getAuto: () => G.autoAccel,
+    isTouch: () => ctx.IS_TOUCH,
+    getAuto: () => S.autoAccel,
     setAuto: v => {
-      G.autoAccel = v;
+      S.autoAccel = v;
       LS.set('cartAuto', v ? '1' : '0');
       showAuto();
     },
     pause: on => {
-      G.paused = on && G.MODE === 'solo';
-      if (!on) G.last = performance.now();
+      S.paused = on && S.MODE === 'solo';
+      if (!on) S.last = performance.now();
     },
     flash: t => flash(t),
   });
