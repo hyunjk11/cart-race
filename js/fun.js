@@ -5,20 +5,9 @@ import * as TR from './track.js';
 import { hAt, atLane as tAtLane, straightAt } from './track.js';
 import { makeCart } from './models.js';
 import { lm } from './util.js';
+import { ITEMS, W_FRONT, W_BACK } from './config/items.js';
 
-export const ITEMS = {
-  banana: { icon: '🍌', name: '바나나 껍질' },
-  puddle: { icon: '🪣', name: '물 양동이' },
-  sign: { icon: '⚠️', name: '미끄럼 주의' },
-  bag: { icon: '🛍️', name: '장바구니 미사일' },
-  shield: { icon: '🛡️', name: '실드' },
-  magnet: { icon: '🧲', name: '자석' },
-};
 const ITEM_KEYS = Object.keys(ITEMS);
-// item odds by race position: leaders get mostly defensive/drop items, the back of the pack gets catch-up items
-//                 banana puddle sign  bag  shield magnet
-const W_FRONT = [3, 2, 2, 0.6, 3, 0.4],
-  W_BACK = [0.8, 0.8, 0.4, 3, 1, 3];
 export function itemOdds(t) {
   const w = W_FRONT.map((f, i) => f + (W_BACK[i] - f) * t),
     s = w.reduce((a, b) => a + b, 0);

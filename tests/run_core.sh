@@ -13,7 +13,7 @@ run() { # run <label> <cmd...>
   done
   echo "=== $label FAILED"; return 1
 }
-run undef node ../tools/undef.mjs ../js/*.js || fails+=(undef)
+run undef node ../tools/undef.mjs ../js/*.js ../js/config/*.js || fails+=(undef)
 run smoke python3 smoke.py || fails+=(smoke)
 run shop1-mart python3 shop1.py "$BASE" mart || fails+=(shop1)
 run banner python3 banner.py "$BASE" || fails+=(banner)

@@ -4,11 +4,14 @@
  */
 import * as THREE from 'three';
 import * as TR from './track.js';
-import { path, hAt, strips, tangentAt, LAPS } from './track.js';
+import { path, hAt, strips, tangentAt } from './track.js';
+import { LAPS } from './config/tuning.js';
 import { charOf } from './chars.js';
 import { tutorialTick } from './help.js';
-import { ITEMS } from './fun.js';
-import { T_LIMIT, won } from './shop.js';
+
+import { ITEMS } from './config/items.js';
+import { won } from './shop.js';
+import { T_LIMIT } from './config/shop.js';
 import { S, ctx } from './state.js';
 import { $, pick, stripTags } from './util.js';
 import { netSay } from './netglue.js';

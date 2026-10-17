@@ -1,5 +1,6 @@
 // Online multiplayer: host-authoritative P2P over WebRTC using PeerJS (public PeerJS cloud broker).
-import { ROSTER, charOf } from './chars.js';
+import { charOf } from './chars.js';
+import { ROSTER } from './config/characters.js';
 import { LS } from './store.js';
 import { iceServers } from './netconfig.js';
 import { $, escHtml } from './util.js';

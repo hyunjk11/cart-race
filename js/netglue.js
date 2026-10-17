@@ -9,9 +9,11 @@ import * as FX from './fx.js';
 import * as TR from './track.js';
 import { hAt } from './track.js';
 import { sound } from './audio.js';
-import { T_LIMIT } from './shop.js';
+
+import { T_LIMIT } from './config/shop.js';
 import { shopRows, showResults, toLobby, leftRoom } from './results.js';
 import { S, ctx } from './state.js';
+import { MAXP } from './config/tuning.js';
 import { $, r2, pick } from './util.js';
 
 function onRemoteState(i, s) {
@@ -23,7 +25,7 @@ function onRemoteItem(i) {
   if (c && c.remote) c.useItem = true;
 }
 function onSpawn(a) {
-  if (S.MODE === 'host' && ctx.products.length < ctx.MAXP + 20) ctx.spawnProduct(...a.slice(0, 6).map(Number));
+  if (S.MODE === 'host' && ctx.products.length < MAXP + 20) ctx.spawnProduct(...a.slice(0, 6).map(Number));
 }
 function slotToBot(i) {
   const c = ctx.carts[i];

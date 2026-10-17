@@ -16,3 +16,5 @@ export const stripTags = t => String(t).replace(/[<>&]/g, '');
 export const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 /** Flat Lambert material of one colour. */
 export const lm = c => new THREE.MeshLambertMaterial({ color: c });
+
+export const clamp01 = v => Math.max(0, Math.min(1, v));

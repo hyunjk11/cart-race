@@ -36,5 +36,5 @@ export const S = {
   TLIM: null,
 };
 
-/** Registered by main.js: CU_ST, IS_TOUCH, MAXP, PKINDS, QUALITY, SHOPON, SOLO_SLOTS, ang, bubbleLayer, bubbles, camPos, camera, carts, chaos, circlePush, customers, endCut, endSpectate, finishOrder, fmt, getBest, hopOut, loadMap, nRiders, nameTag, onOpts, optsNow, pMats, products, puff, pushOut, renderMaps, resetCart, retarget, ridePose, scene, showIntro, spawnProduct, specCart, specList, startCut, startRaceMP, startSpectate, stats, traffic, world */
+/** Registered by main.js: CU_ST, IS_TOUCH, PKINDS, QUALITY, SHOPON, SOLO_SLOTS, ang, bubbleLayer, bubbles, camPos, camera, carts, chaos, circlePush, customers, endCut, endSpectate, finishOrder, fmt, getBest, hopOut, loadMap, nRiders, nameTag, onOpts, optsNow, pMats, products, puff, pushOut, renderMaps, resetCart, retarget, ridePose, scene, showIntro, spawnProduct, specCart, specList, startCut, startRaceMP, startSpectate, stats, traffic, world */
 export const ctx = {};

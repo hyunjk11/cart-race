@@ -1,6 +1,7 @@
 // Character select: rotating 3D preview + roster cards (title & lobby).
 import * as THREE from 'three';
-import { ROSTER, charOf, makeRacer, makeDeco, statBar } from './chars.js';
+import { charOf, makeRacer, makeDeco, statBar } from './chars.js';
+import { ROSTER } from './config/characters.js';
 import { LS } from './store.js';
 import { $ } from './util.js';
 

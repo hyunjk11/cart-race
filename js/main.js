@@ -1,13 +1,17 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import * as TR from './track.js';
-import { LAPS, MAPS, MAP_IDS, setMap, buildWorld, textSprite, path, strips, hAt, zoneAt, inRect, atLane, tangentAt } from './track.js';
+import { MAP_IDS, setMap, buildWorld, textSprite, path, strips, hAt, zoneAt, inRect, atLane, tangentAt } from './track.js';
+import { LAPS, CART, INTRO_S, SCOOP_P, MAXP, RIDE_S, CART_R, DIFFS } from './config/tuning.js';
+import { MAPS } from './config/maps.js';
 import { createFun, itemOdds } from './fun.js';
 import { NET, pushLobby, setMyChar } from './net.js';
 import { makeCart, makeCustomer } from './models.js';
 import * as FX from './fx.js';
-import { createShop, T_LIMIT } from './shop.js';
-import { ROSTER, charOf } from './chars.js';
+import { createShop } from './shop.js';
+import { T_LIMIT } from './config/shop.js';
+import { charOf } from './chars.js';
+import { ROSTER } from './config/characters.js';
 import { openCharSel, tickCharPrev, setLineup } from './charsel.js';
 import { initAudio, sound, setEngine, setDrift } from './audio.js';
 import { LS, DEBUG } from './store.js';
@@ -167,7 +171,6 @@ const stats = { knocked: 0, spilled: 0 };
 Object.assign(ctx, { stats });
 
 // ---------- carts ----------
-const CART_R = 1.3;
 const carts = [];
 Object.assign(ctx, { carts });
 function addCart(color, name, lane, row, ai, charId) {
@@ -245,9 +248,8 @@ S.player = addCart(0xff4f8b, '나', -2.5, 0, false, S.MYCHAR);
 }
 
 // ---------- products (physics pool) ----------
-const MAXP = 110,
-  products = [];
-Object.assign(ctx, { MAXP, products });
+const products = [];
+Object.assign(ctx, { products });
 const boxG = new THREE.BoxGeometry(0.4, 0.55, 0.4),
   canG = new THREE.CylinderGeometry(0.17, 0.17, 0.4, 10);
 const pCols = [0xe53935, 0x43a047, 0x1e88e5, 0xfdd835, 0xfb8c00, 0x8e24aa, 0x00acc1];
@@ -394,7 +396,6 @@ function pushOut1(o, r) {
 }
 const nRiders = c => (c.riders && c.riders.length ? c.riders.length : c.riderN || 0);
 Object.assign(ctx, { nRiders });
-const RIDE_S = 0.8;
 function ridePose(cu, c, seat, n) {
   // sit in the basket: hips on the basket floor, legs dangling over the front, wobble with the cart
   const fx = Math.sin(c.h),
@@ -457,7 +458,7 @@ for (let k = 0; k < 16; k++) {
   const cu = { g, holder, state: 'walk', t: 0, x: 0, z: 0, tx: 0, tz: 0, sp: 1 + Math.random() * 0.8, body: null };
   customers.push(cu);
 }
-const SCOOP = DEBUG && new URLSearchParams(location.search).has('scoop') ? +new URLSearchParams(location.search).get('scoop') : 0.3;
+const SCOOP = DEBUG && new URLSearchParams(location.search).has('scoop') ? +new URLSearchParams(location.search).get('scoop') : SCOOP_P;
 function scoop(cu, c) {
   c.riders = c.riders || [];
   cu.state = 'ride';
@@ -775,7 +776,7 @@ function updateCart(c, dt) {
     if (S.state === 'race' && !c.finished) {
       if (c.n2o > 0) {
         c.n2o--;
-        c.boostT = 1.7;
+        c.boostT = CART.n2oTime;
         c.v += 2;
         if (c.ai && Math.random() < 0.3) say(c, cline(c, 'boost', ['간다~!']), 1.2);
       } else if (!c.ai) {
@@ -846,10 +847,10 @@ function updateCart(c, dt) {
     c.maxV *
     (c.st ? c.st.spd : 1) *
     (c.ai && S.state === 'race' ? rubber(c) : 1) *
-    (boosting ? 1.45 : 1) *
-    (c.push && S.autoAccel ? 1.1 : 1) *
-    (c.magnetT > 0 ? 1.15 : 1) *
-    (1 - 0.12 * nRiders(c));
+    (boosting ? CART.boostSpeed : 1) *
+    (c.push && S.autoAccel ? CART.autoPushSpeed : 1) *
+    (c.magnetT > 0 ? CART.magnetSpeed : 1) *
+    (1 - CART.riderSlow * nRiders(c));
   const zn = zoneAt(c.x, c.z);
   c.bumpT = (c.bumpT || 0) - dt;
   if (zn) {
@@ -857,11 +858,11 @@ function updateCart(c, dt) {
     else if (zn.t === 'walk') {
       const dot = Math.sin(c.vd) * zn.dx + Math.cos(c.vd) * zn.dz;
       if (dot > 0.5) {
-        maxV *= 1.35;
+        maxV *= CART.walkwaySpeed;
         c.v += 6 * dt;
         c.beltT = (c.beltT || 0) + dt;
       } else if (dot < -0.5) c.v -= 6 * dt * Math.sign(c.v || 1);
-    } else if (zn.t === 'esc') maxV *= 0.9;
+    } else if (zn.t === 'esc') maxV *= CART.escalatorSpeed;
     else if (zn.t === 'bump' && Math.abs(c.v) > 7 && c.bumpT <= 0) {
       c.bumpT = 0.7;
       c.v *= 0.72;
@@ -880,16 +881,16 @@ function updateCart(c, dt) {
     }
   }
   c.lastZone = zn;
-  if (thr > 0) c.v += (boosting ? 22 : 12) * (1 - 0.12 * nRiders(c)) * dt * (1 - Math.max(0, c.v) / maxV);
+  if (thr > 0) c.v += (boosting ? CART.boostAccel : CART.accel) * (1 - CART.riderSlow * nRiders(c)) * dt * (1 - Math.max(0, c.v) / maxV);
   else if (thr < 0) c.v -= (c.v > 0 ? 30 : 8) * dt;
-  c.v -= c.v * 0.6 * dt;
+  c.v -= c.v * CART.drag * dt;
   if (c.v < -6) c.v = -6;
   if (thr === 0 && Math.abs(c.v) < 0.3) c.v = 0;
   const sf = Math.min(1, Math.abs(c.v) / 5) * Math.sign(c.v || 1);
   if (c.drifting) {
     c.h += (c.driftDir * 0.8 + steer * 0.6) * 2.5 * dt * sf;
     c.v -= c.v * 0.18 * dt;
-  } else c.h += steer * dt * 2.4 * sf * (c.st ? c.st.hdl : 1);
+  } else c.h += steer * dt * CART.steerRate * sf * (c.st ? c.st.hdl : 1);
   const grip = c.drifting ? 1.6 : c.slipT > 0 ? 0.9 : c.spin > 0 ? 0.5 : 9;
   let slip = ang(c.h - c.vd);
   c.vd += slip * Math.min(1, grip * dt);
@@ -901,7 +902,7 @@ function updateCart(c, dt) {
   c.slip = slip;
   if (c.drifting && Math.abs(slip) > 0.75 && c.riders && c.riders.length && c.driftT > 0.8) hopOut(c, 'drift');
   if (c.drifting && S.state === 'race') {
-    c.gauge += Math.abs(slip) * Math.abs(c.v) * dt * 0.2 * (c.st ? c.st.drf : 1);
+    c.gauge += Math.abs(slip) * Math.abs(c.v) * dt * CART.driftCharge * (c.st ? c.st.drf : 1);
     if (c.gauge >= 1) {
       c.gauge = 0;
       if (c.n2o < 2) {
@@ -1248,11 +1249,6 @@ hudMod.init1();
 let funOwned = null,
   checkout = null;
 const QS = new URLSearchParams(location.search);
-const DIFFS = {
-  easy: ['쉬움', '🐢', 15.0, 1.9, 0.01, 0.1],
-  normal: ['보통', '🐰', 17, 2.5, 0.05, 0.05],
-  hard: ['어려움', '🔥', 18.6, 2.0, 0.08, 0.02],
-}; // label, icon, bot base maxV, +random, max catch-up boost, max slow-down when ahead
 let DIFF = DIFFS[QS.get('diff') || LS.get('cartDiff')] ? QS.get('diff') || LS.get('cartDiff') : 'normal';
 const botMaxV = () => {
   const d = DIFFS[DIFF];
@@ -1829,7 +1825,7 @@ function startRaceMP(slots, you, mode) {
   initAudio();
 }
 // ---------- start-line intro sweep (part of the synced countdown; skip = camera only in multiplayer) ----------
-const INTRO = new URLSearchParams(location.search).has('nointro') ? 0 : 4.5;
+const INTRO = new URLSearchParams(location.search).has('nointro') ? 0 : INTRO_S;
 let introSkip = false;
 const introOn = () => S.state === 'countdown' && S.cd > 3.99 && !introSkip;
 function showIntro(on) {
