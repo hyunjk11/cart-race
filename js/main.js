@@ -3,7 +3,7 @@ import * as CANNON from 'cannon-es';
 import * as TR from './track.js';
 import { LAPS, MAPS, MAP_IDS, setMap, buildWorld, textSprite, path, strips, hAt, zoneAt, inRect, atLane, tangentAt } from './track.js';
 import { createFun, ITEMS, itemOdds } from './fun.js';
-import { initNet, NET, hostResults, pushLobby, setMyChar } from './net.js';
+import { NET, pushLobby, setMyChar } from './net.js';
 import { makeCart, makeCustomer } from './models.js';
 import * as FX from './fx.js';
 import { createShop, T_LIMIT, won } from './shop.js';
@@ -19,9 +19,12 @@ import * as __results from './results.js';
 import { endRace, shopRows, showResults, toLobby, leftRoom } from './results.js';
 import * as __inputglue from './inputglue.js';
 import { startGame } from './inputglue.js';
+import * as __netglue from './netglue.js';
+import { netSay, netFollow, applyRemote, mpFinish, guestBumps, mirror, guestCustomers, mpTick } from './netglue.js';
 // G:begin — shared state for the split-out modules (generated accessors; live bindings into this file)
 const G = {
   get $() { return $; },
+  get ang() { return ang; },
   get autoAccel() { return autoAccel; }, set autoAccel(v) { autoAccel = v; },
   get bubbleLayer() { return bubbleLayer; },
   get bubbles() { return bubbles; },
@@ -29,6 +32,8 @@ const G = {
   get camPos() { return camPos; },
   get carts() { return carts; },
   get chaos() { return chaos; },
+  get circlePush() { return circlePush; },
+  get CU_ST() { return CU_ST; },
   get customers() { return customers; },
   get cut() { return cut; }, set cut(v) { cut = v; },
   get cutDone() { return cutDone; }, set cutDone(v) { cutDone = v; },
@@ -36,31 +41,51 @@ const G = {
   get endSpectate() { return endSpectate; },
   get esc() { return esc; },
   get finishOrder() { return finishOrder; },
+  get firstFinT() { return firstFinT; }, set firstFinT(v) { firstFinT = v; },
   get fmt() { return fmt; },
   get fun() { return fun; }, set fun(v) { fun = v; },
   get getBest() { return getBest; },
   get GMODE() { return GMODE; }, set GMODE(v) { GMODE = v; },
+  get hopOut() { return hopOut; },
   get IS_TOUCH() { return IS_TOUCH; },
   get last() { return last; }, set last(v) { last = v; },
+  get loadMap() { return loadMap; },
+  get MAXP() { return MAXP; },
   get MODE() { return MODE; }, set MODE(v) { MODE = v; },
+  get mpDone() { return mpDone; }, set mpDone(v) { mpDone = v; },
   get msgT() { return msgT; }, set msgT(v) { msgT = v; },
   get MYCHAR() { return MYCHAR; }, set MYCHAR(v) { MYCHAR = v; },
+  get N() { return N; },
   get nameTag() { return nameTag; },
+  get netAcc() { return netAcc; }, set netAcc(v) { netAcc = v; },
   get netSay() { return netSay; },
   get nRiders() { return nRiders; },
+  get onOpts() { return onOpts; },
+  get optsNow() { return optsNow; },
   get paused() { return paused; }, set paused(v) { paused = v; },
   get pick() { return pick; },
+  get PKINDS() { return PKINDS; },
   get player() { return player; }, set player(v) { player = v; },
+  get pMats() { return pMats; },
+  get products() { return products; },
+  get puff() { return puff; },
   get pushOut() { return pushOut; },
   get QUALITY() { return QUALITY; },
+  get r2() { return r2; },
   get raceT() { return raceT; }, set raceT(v) { raceT = v; },
+  get renderMaps() { return renderMaps; },
   get resetCart() { return resetCart; },
   get retarget() { return retarget; },
+  get ridePose() { return ridePose; },
+  get scene() { return scene; },
+  get shake() { return shake; }, set shake(v) { shake = v; },
   get shop() { return shop; }, set shop(v) { shop = v; },
   get shopHudSig() { return shopHudSig; }, set shopHudSig(v) { shopHudSig = v; },
   get SHOPON() { return SHOPON; },
   get showIntro() { return showIntro; },
+  get snapN() { return snapN; }, set snapN(v) { snapN = v; },
   get SOLO_SLOTS() { return SOLO_SLOTS; },
+  get spawnProduct() { return spawnProduct; },
   get spec() { return spec; }, set spec(v) { spec = v; },
   get specCart() { return specCart; },
   get specList() { return specList; },
@@ -74,7 +99,7 @@ const G = {
   get traffic() { return traffic; },
   get world() { return world; }
 };
-__hud.bind(G); __inputglue.bind(G); __results.bind(G); 
+__hud.bind(G); __inputglue.bind(G); __results.bind(G); __netglue.bind(G);
 // G:end
 
 const $ = id => document.getElementById(id);
@@ -667,102 +692,7 @@ let specSig = '';
 
 __hud.init2();
 
-function onRemoteState(i, s) { const c = carts[i]; if (c && c.remote) c.rs = s; }
-function onRemoteItem(i) { const c = carts[i]; if (c && c.remote) c.useItem = true; }
-function onSpawn(a) { if (MODE === 'host' && products.length < MAXP + 20) spawnProduct(...a.slice(0, 6).map(Number)); }
-function slotToBot(i) { const c = carts[i]; if (!c) return; c.remote = false; c.ai = true; c.name += ' (봇)'; nameTag(c, c.name); NET.broadcast({ t: 'slots', names: carts.map(c => c.name) }); }
-function onSlots(m) { (m.names || []).forEach((n, i) => { const c = carts[i]; if (c && c !== player && !c.inactive && c.name !== n) { c.name = n; nameTag(c, n); } }); }
-function applyRemote(c, dt) {
-  const s = c.rs; if (!s) return; const k = Math.min(1, dt * 15);
-  c.x += (s[0] - c.x) * k; c.z += (s[1] - c.z) * k; c.h = s[2]; c.vd = s[3]; c.v = s[4]; c.drifting = !!s[5]; c.slip = s[6]; c.lap = s[7]; c.idx = s[8]; c.steerIn = s[11];
-  if (s[9] && !c.finished) { c.finished = true; c.time = s[10]; finishOrder.push(c); }
-  c.prog = c.finished ? 1e6 - c.time : c.lap * N + c.idx;
-  if (c.drifting && Math.abs(c.slip) > 0.75 && (s[12] || 0) > 0.8 && c.riders && c.riders.length) hopOut(c, 'drift');
-  if (c.magnetT > 0 && c.magTarget) { /* guest applies the pull locally from the snapshot */ }
-}
-function onRemoteCrash(i, k) { const c = carts[i]; if (!c || !c.remote) return; if (c.riders && c.riders.length) hopOut(c, 'crash'); if (SHOPON() && k > 7 && state === 'race') shop.crash(c, k); }
-function netFollow(c, dt) {
-  const s = c.ns; if (!s) return; const k = Math.min(1, dt * 10);
-  if (Math.hypot(s[0] - c.x, s[1] - c.z) > 12) { c.x = s[0]; c.z = s[1]; }
-  c.x += (s[0] - c.x) * k; c.z += (s[1] - c.z) * k; c.h += ang(s[2] - c.h) * k; c.vd = s[3]; c.v = s[4]; c.drifting = !!s[5]; c.slip = s[6];
-  c.lap = s[7]; c.idx = s[8]; c.prog = s[9]; c.finished = !!s[10]; c.time = s[11]; c.shieldT = s[13] ? 1 : 0; c.riderN = s[14];
-}
-function makeSnap(full) {
-  const S = Object.assign({ t: 'snap',
-    c: carts.map(c => c.inactive ? null : [r2(c.x), r2(c.z), r2(c.h), r2(c.vd), r2(c.v), c.drifting ? 1 : 0, r2(c.slip || 0), c.lap, c.idx, Math.round(c.prog), c.finished ? 1 : 0, r2(c.time), c.item, c.shieldT > 0 ? 1 : 0, nRiders(c), c.hitSeq || 0, c.magnetT > 0 && c.magTarget ? carts.indexOf(c.magTarget) : -1, r2(c.slipT || 0)]),
-    cu: customers.map(cu => { const p = cu.holder.position, q = cu.holder.quaternion; return [r2(p.x), r2(p.y), r2(p.z), r2(q.x), r2(q.y), r2(q.z), r2(q.w), CU_ST.indexOf(cu.state), cu.state === 'ride' ? carts.indexOf(cu.cart) : -1, cu.seat || 0]; }) }, fun.snap());
-  if (full) S.pr = products.map(p => { const b = p.body; return [p.k, r2(b.position.x), r2(b.position.y), r2(b.position.z), r2(b.quaternion.x), r2(b.quaternion.y), r2(b.quaternion.z), r2(b.quaternion.w)]; });
-  else delete S.pp;
-  if (SHOPON()) S.sh = shop.snap();
-  return S;
-}
-const mirror = [];
-function onSnap(m) {
-  if (MODE !== 'guest') return;
-  m.c.forEach((a, i) => { const c = carts[i]; if (!a || !c) return;
-    if (c === player) { player.item = a[12]; player.shieldT = a[13] ? 1 : 0; player.riderN = a[14];
-      if (a[16] >= 0 && carts[a[16]]) { player.magnetT = 0.3; player.magTarget = carts[a[16]]; }
-      if (a[17] > 0) player.slipT = Math.max(player.slipT || 0, a[17]);
-      if (a[15] > (player.hitSeqSeen || 0)) { player.hitSeqSeen = a[15]; if (performance.now() - (player.predHitAt || 0) > 1200) guestHit(); } }
-    else c.ns = a; });
-  m.cu.forEach((a, i) => { if (customers[i]) customers[i].nt = a; });
-  if (m.pr) { m.pr.forEach((a, i) => { let mm = mirror[i]; const K = PKINDS[a[0]] || PKINDS[0];
-      if (!mm || mm.k !== a[0]) { if (mm) scene.remove(mm.mesh); mm = mirror[i] = { k: a[0], mesh: new THREE.Mesh(K.g, K.m || pMats[i % pMats.length]) }; scene.add(mm.mesh); }
-      mm.mesh.visible = true; mm.mesh.position.set(a[1], a[2], a[3]); mm.mesh.quaternion.set(a[4], a[5], a[6], a[7]); });
-    for (let i = m.pr.length; i < mirror.length; i++) mirror[i].mesh.visible = false; }
-  fun.applySnap(m);
-  if (m.sh && shop) shop.applySnap(m.sh);
-}
-const _q = new THREE.Quaternion();
-function guestCustomers(dt) {
-  const k = Math.min(1, dt * 10);
-  for (const cu of customers) { const a = cu.nt; if (!a) continue; const h = cu.holder, ox = h.position.x, oz = h.position.z;
-    if (Math.hypot(a[0] - ox, a[2] - oz) > 6) h.position.set(a[0], a[1], a[2]); else { h.position.x += (a[0] - ox) * k; h.position.y += (a[1] - h.position.y) * k; h.position.z += (a[2] - oz) * k; }
-    cu.state = CU_ST[a[7]] || 'walk';
-    if (cu.state === 'ride' && carts[a[8]]) { const c = carts[a[8]]; cu.t = (cu.t || 0) + dt; ridePose(cu, c, a[9], Math.max(1, nRiders(c))); cu.x = h.position.x; cu.z = h.position.z; continue; }
-    _q.set(a[3], a[4], a[5], a[6]); h.quaternion.slerp(_q, k); h.scale.setScalar(1);
-    const moved = Math.hypot(h.position.x - ox, h.position.z - oz); cu.t = (cu.t || 0) + moved * 4; cu.g.walk(cu.state === 'walk' && moved > 0.002 ? cu.t : 0);
-    cu.x = h.position.x; cu.z = h.position.z; }
-}
-function guestHit() { const p = player; p.spin = 1.1; p.v *= 0.35; p.drifting = false; shake = 0.7; flash('당했다! 🌀'); FX.comic(p.x, 2 + hAt(p.x, p.z), p.z, pick(['POW!', '퍽!', '빙글~']), '#ff4081'); FX.screenFlash('#fff', 0.45); sound.bump(1); puff(p.x, 0.8, p.z, 0xffffff, 6); }
-function guestBumps(c) {
-  if (c !== player) return;
-  // effects the host can't apply to a locally-predicted cart: predicted banana spin, wet signs, fallen customers, VIP/forklift, loose products
-  for (const h of fun.hazards) { const d = Math.hypot(c.x - h.x, c.z - h.z);
-    if (h.type === 'banana' && d < h.r + 0.4 && !h.gone && h.arm <= 0) { h.gone = true; h.mesh.visible = false; const sh = c.shieldT > 0; NET.send({ t: 'hz', id: h.id, sh }); if (sh) { c.shieldT = 0; say(c, '실드로 막았다!', 1.3, true); } else { c.predHitAt = performance.now(); guestHit(); } }
-    else if (h.type === 'sign' && d < h.r + 0.4 && !h.gone && h.arm <= 0) { h.gone = true; NET.send({ t: 'hz', id: h.id }); h.mesh.visible = false; c.v *= 0.55; puff(h.x, 0.6, h.z, 0xffd600, 5); sound.bump(0.8); shake = Math.max(shake, 0.3); } }
-  for (const cu of customers) if ((cu.state === 'down' || cu.state === 'rise') && circlePush(c, cu.holder.position.x, cu.holder.position.z, 1.7, 0.9)) {}
-  const E = fun.ev; if (E.vip) circlePush(c, E.vip.x, E.vip.z, 3.4, 0.9); if (E.fork && E.forkT) circlePush(c, E.forkT[0], E.forkT[1], 2.2, 0.6);
-  for (const m of mirror) if (m.mesh.visible) { const b = m.mesh.position; if (b.y - hAt(b.x, b.z) < 0.6 && Math.abs(b.x - c.x) < 1.4 && Math.abs(b.z - c.z) < 1.4) c.v *= 0.993; }
-  for (const cu of customers) if (cu.state === 'walk' && Math.hypot(c.x - cu.x, c.z - cu.z) < 1.3 && (c.bump || 0) <= 0) { c.v *= Math.abs(c.v) > 9 ? 0.75 : 0.5; c.bump = 0.6; sound.bump(0.6); }
-}
-function onSay(m) { const ent = m.k === 'u' ? customers[m.i] : carts[m.i]; if (ent && !ent.inactive) say(ent, m.text, m.dur, true); }
-function netSay(ent, text, dur) { const i = customers.indexOf(ent), j = carts.indexOf(ent); if (i >= 0) NET.broadcast({ t: 'say', k: 'u', i, text, dur }); else if (j >= 0) NET.broadcast({ t: 'say', k: 'c', i: j, text, dur }); }
-function myState() { const c = player; return [r2(c.x), r2(c.z), r2(c.h), r2(c.vd), r2(c.v), c.drifting ? 1 : 0, r2(c.slip || 0), c.lap, c.idx, c.finished ? 1 : 0, r2(c.time), c.steerIn || 0, r2(c.driftT || 0)]; }
-function mpFinish() { flash('🏁 완주! 다른 참가자를 기다리는 중…'); msgT = 6; startCut(finishOrder[0] && !finishOrder[0].inactive ? finishOrder[0] : player); }
-function mpTick(dt) {
-  if (MODE === 'host' && (state === 'countdown' || state === 'race')) {
-    netAcc += dt; if (netAcc >= 1 / 15) { netAcc = 0; snapN++; NET.broadcast(makeSnap(snapN % 3 === 0)); }
-    if (state === 'race' && !mpDone) {
-      const humans = carts.filter(c => !c.inactive && (c === player || c.remote));
-      if (!firstFinT && carts.some(c => !c.inactive && c.finished)) firstFinT = raceT;
-      const allDone = carts.every(c => c.inactive || c.finished);
-      if (SHOPON() ? (allDone || (firstFinT && raceT - firstFinT > 45) || (TLIM && raceT >= T_LIMIT)) : (humans.every(c => c.finished) || (firstFinT && raceT - firstFinT > 30))) {
-        mpDone = true; const act = carts.filter(c => !c.inactive);
-        const order = [...finishOrder.filter(c => !c.inactive), ...act.filter(c => !c.finished).sort((a, b) => b.prog - a.prog)];
-        if (SHOPON()) hostResults(shopRows().map(r => ({ name: r.name, time: r.time, bot: r.bot, i: r.i, score: r.score, rc: r.rc })));
-        else hostResults(order.map(c => ({ name: c.name, time: c.finished ? c.time : null, bot: !!c.ai })));
-      }
-    }
-  }
-  if (MODE === 'guest' && (state === 'countdown' || state === 'race')) {
-    netAcc += dt; if (netAcc >= 0.05) { netAcc = 0; NET.send({ t: 'st', s: myState() }); }
-    if (player.useItem) { player.useItem = false; if (player.item || (SHOPON() && shop.nearest(player, 3.0))) NET.send({ t: 'item' }); }
-  }
-}
-
-initNet({ getChar: () => MYCHAR, getOpts: () => optsNow(), onOpts, getMap: () => TR.MAP_ID, onMap: id => { if (id !== TR.MAP_ID) loadMap(id); }, renderMaps: () => renderMaps(), onRemoteHazard: (i, id, sh) => { const c = carts[i]; if (c && c.remote) fun.remoteHazardHit(c, id, sh); }, startRace: startRaceMP, onRemoteState, onRemoteCrash, onRemoteItem, onSpawn, slotToBot, onSnap, onSay, onSlots, showResults, toLobby, leftRoom,
-  onMenu: open => { if (state === 'title' || state === 'lobby') state = open ? 'lobby' : 'title'; } });
+__netglue.init();
 
 // ---------- loop ----------
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(); let camY = 0;
