@@ -78,8 +78,9 @@ async def main():
         await B.wait_for_selector("#mpLobby:not(.hidden)", timeout=20000); await A.wait_for_selector("#mpLobby:not(.hidden)", timeout=20000)
         print("back to lobby states", await ev(A,"__game.state"), await ev(B,"__game.state"))
         # host leaves -> guest gets message
-        await ca.close(); await B.wait_for_selector("#mpMenu:not(.hidden)", timeout=20000)
-        print("guest msg after host left:", await B.text_content("#mpMsg"))
+        # host leaves -> (E3) the remaining guest takes over the room as the new host, same room code
+        await ca.close(); await B.wait_for_function("__game.NET.mode==='host'", timeout=40000)
+        print("after host left: guest is new host of", await B.text_content("#roomCode"), "(was", code + ")", "| chat:", (await B.inner_text("#chatLog")).split("\n")[-1])
         print("ERRORS", json.dumps(errs, ensure_ascii=False))
         await b.close()
 asyncio.run(main())

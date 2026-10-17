@@ -38,13 +38,15 @@ function peerOpts() {
 const genCode = () => Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[(Math.random() * 32) | 0]).join('');
 
 // ---------------- HOST ----------------
-async function createRoom(tries = 0) {
-  const P = await loadPeer(); const name = nick(); msg('방을 만드는 중…');
-  NET.code = genCode(); peer = new P(PREFIX + NET.code, peerOpts());
+async function createRoom(tries = 0, mg = null) {
+  const P = await loadPeer(); const name = mg ? (mg.slots[mg.you] || {}).name || nick() : nick(); if (!mg) msg('방을 만드는 중…');
+  NET.code = mg ? mg.code : genCode(); const me = peer = new P(PREFIX + NET.code, peerOpts());
   peer.on('open', () => {
     NET.mode = 'host'; NET.you = 0; NET.slots = [{ type: 'human', name, ready: true, id: 'host', char: api.getChar() }, null, null, null];
+    if (mg) mg.slots.forEach((s, i) => { if (i > 0 && s && s.type === 'bot') NET.slots[i] = s; }); // host migration: keep the bots, humans rejoin into free slots
     NET.broadcast = m => { const s = JSON.stringify(m); for (const c of NET.conns.values()) if (c.open) c.send(s); };
-    NET.map = api.getMap(); NET.opts = api.getOpts(); showLobby(); pushLobby(); msg('');
+    NET.map = api.getMap(); NET.opts = mg ? mg.opts || api.getOpts() : api.getOpts(); mig = null; showLobby(); pushLobby(); msg('');
+    if (mg) chat(`이전 호스트가 나가서 ${name} 님이 새 호스트가 되었습니다.`);
   });
   peer.on('connection', conn => {
     conn.on('open', () => { NET.conns.set(conn.peer, conn); lastSeen.set(conn.peer, performance.now()); });
@@ -53,7 +55,7 @@ async function createRoom(tries = 0) {
     conn.on('error', () => hostDrop(conn.peer));
   });
   peer.on('disconnected', () => { try { peer.reconnect(); } catch (e) {} });
-  peer.on('error', e => { if (e.type === 'unavailable-id' && tries < 3) { peer.destroy(); createRoom(tries + 1); return; } msg(ERR[e.type] || ('연결 오류: ' + e.type), true); });
+  peer.on('error', e => { if (mg) { if (peer === me) migRetry(); return; } if (e.type === 'unavailable-id' && tries < 3) { peer.destroy(); createRoom(tries + 1); return; } msg(ERR[e.type] || ('연결 오류: ' + e.type), true); });
 }
 function slotOf(peerId) { return NET.slots.findIndex(s => s && s.id === peerId); }
 const lastSeen = new Map(); let hostSeen = 0;
@@ -112,7 +114,7 @@ function removeSlot(i) {
 }
 export function pushLobby() {
   if (NET.mode !== 'host') return;
-  for (const [pid, c] of NET.conns) if (c.open) c.send(JSON.stringify({ t: 'lobby', slots: NET.slots, you: slotOf(pid), code: NET.code, map: NET.map, opts: NET.opts }));
+  for (const [pid, c] of NET.conns) if (c.open) c.send(JSON.stringify({ t: 'lobby', slots: NET.slots.map(s => s && { ...s, tok: undefined, human: undefined }), you: slotOf(pid), code: NET.code, map: NET.map, opts: NET.opts, race: NET.inRace }));
   renderLobby();
 }
 function canStart() { const n = NET.slots.filter(Boolean).length; return n >= 2 && NET.slots.every(s => !s || s.ready); }
@@ -130,15 +132,36 @@ function backToLobby() { NET.inRace = false; NET.slots.forEach(s => { if (s && s
 function roomTok(code) { const k = 'cartTok_' + code; let t = LS.get(k); if (!t) { t = Array.from({ length: 16 }, () => 'abcdefghijkmnpqrstuvwxyz23456789'[(Math.random() * 32) | 0]).join(''); LS.set(k, t); } return t; }
 let retry = 0;
 // connection to the host lost mid-race: try to rejoin the same room (host gives the slot back by token) before giving up
-function lost(reason) {
-  if (NET.mode === 'guest' && NET.inRace && retry < 3) {
+function lost(reason, gone = false) {
+  if (NET.mode !== 'guest') { leave(reason); return; }
+  if (mig) { migRetry(); return; }
+  if (NET.inRace && retry < 3 && !gone) {
     retry++; const p = peer; peer = null; NET.hostConn = null; NET.send = () => {}; hostSeen = 0;
     try { p && p.destroy(); } catch (e) {}
     api.netNote(`📡 연결이 끊겨 다시 연결하는 중… (${retry}/3)`);
     setTimeout(() => joinRoom(NET.code, true).catch(() => leave(reason)), 1000); return;
   }
-  leave(reason);
+  migrate(reason);
 }
+// ---- host migration (E3): the host is gone -> the first remaining guest re-opens the SAME room code as the new host,
+// the other guests rejoin it (bots are kept). A race in progress cannot be carried over (the host simulated it), so
+// everyone lands back in the lobby and can start the next race. If it fails, a clear message + back to the MP menu.
+let mig = null;
+function migrate(reason) {
+  const humans = NET.slots.map((s, i) => s && s.type === 'human' && i > 0 ? i : -1).filter(i => i > 0);
+  if (NET.you <= 0 || !humans.includes(NET.you)) { leave(reason); return; }
+  const wasRace = NET.inRace; dropPeer(); NET.inRace = false; api.leftRoom();
+  mig = { n: 0, code: NET.code, you: NET.you, cand: humans[0] === NET.you, slots: NET.slots, opts: NET.opts };
+  showLobby(); msg((wasRace ? '호스트가 나가서 경주가 중단되었습니다. ' : '호스트가 나갔습니다. ') + (mig.cand ? '내가 새 호스트가 되어 방을 다시 여는 중…' : '새 호스트에게 다시 연결하는 중…'));
+  setTimeout(migStep, mig.cand ? 1500 : 3500);
+}
+function dropPeer() { const p = peer; peer = null; NET.hostConn = null; NET.send = () => {}; hostSeen = 0; try { p && p.destroy(); } catch (e) {} }
+function migStep() {
+  if (!mig) return;
+  if (++mig.n > 10) { mig = null; leave('호스트가 나가서 방이 닫혔습니다. 메뉴에서 새 방을 만들거나 다른 방에 참가해 주세요.'); return; }
+  (mig.cand ? createRoom(0, mig) : joinRoom(mig.code, true)).catch(() => migRetry());
+}
+function migRetry() { if (!mig) return; dropPeer(); setTimeout(migStep, 2500); }
 async function joinRoom(code, re = false) {
   code = (code || '').trim().toUpperCase(); if (!/^[A-Z0-9]{4,6}$/.test(code)) { msg('방 코드는 4~6자리 영문/숫자입니다.', true); return; }
   if (!re) retry = 0;
@@ -148,18 +171,18 @@ async function joinRoom(code, re = false) {
   const to = setTimeout(() => { if (opened || peer !== me) return; if (re) lost(ERR.timeout); else msg(ERR.timeout, true); }, 15000);
   peer.on('open', () => {
     const conn = peer.connect(PREFIX + code, { reliable: true }); NET.hostConn = conn;
-    conn.on('open', () => { opened = true; clearTimeout(to); NET.mode = 'guest'; NET.send = m => conn.open && conn.send(JSON.stringify(m)); NET.send({ t: 'hello', name, char: api.getChar(), tok: roomTok(code) }); if (!re) { showLobby(); msg(''); } });
+    conn.on('open', () => { opened = true; clearTimeout(to); NET.mode = 'guest'; NET.send = m => conn.open && conn.send(JSON.stringify(m)); NET.send({ t: 'hello', name, char: api.getChar(), tok: roomTok(code) }); if (!re || mig) { mig = null; showLobby(); msg(''); } });
     conn.on('data', d => { if (peer !== me) return; hostSeen = performance.now(); guestRecv(typeof d === 'string' ? JSON.parse(d) : d); });
     conn.on('close', () => { if (NET.mode === 'guest' && peer === me) lost('호스트가 방을 닫았거나 연결이 끊어졌습니다.'); });
     conn.on('error', () => msg(ERR.webrtc, true));
     watchIce(conn, () => { if (!opened) { clearTimeout(to); msg(ERR.webrtc, true); } });
   });
-  peer.on('error', e => { if (peer !== me) return; clearTimeout(to); if (re) { lost(ERR[e.type] || ERR.webrtc); return; } msg(ERR[e.type] || ('연결 오류: ' + e.type), true); });
+  peer.on('error', e => { if (peer !== me) return; clearTimeout(to); if (re) { lost(ERR[e.type] || ERR.webrtc, e.type === 'peer-unavailable'); return; } msg(ERR[e.type] || ('연결 오류: ' + e.type), true); });
 }
 // ICE 'failed' = no direct path and no working relay: show the network tips right away instead of waiting for the timeout
 function watchIce(conn, onFail) { const pc = conn.peerConnection; if (!pc) { setTimeout(() => conn.peerConnection && watchIce(conn, onFail), 200); return; } pc.addEventListener('iceconnectionstatechange', () => { if (pc.iceConnectionState === 'failed') onFail(); }); }
 function guestRecv(m) {
-  if (m.t === 'lobby') { NET.slots = m.slots; NET.you = m.you; if (m.map) { NET.map = m.map; api.onMap(m.map); } if (m.opts) { NET.opts = m.opts; api.onOpts(m.opts); } renderLobby(); }
+  if (m.t === 'lobby') { NET.slots = m.slots; NET.you = m.you; if (m.map) { NET.map = m.map; api.onMap(m.map); } if (m.opts) { NET.opts = m.opts; api.onOpts(m.opts); } if (m.race === false && NET.inRace) { NET.inRace = false; api.toLobby(); showLobby(); msg('호스트가 바뀌어 경주가 중단되었습니다. 다음 경주를 준비해 주세요.'); } renderLobby(); }
   else if (m.t === 'chat') addChat(m.text);
   else if (m.t === 'reject') { leave(m.msg); }
   else if (m.t === 'kicked') { leave('호스트가 당신을 방에서 내보냈습니다.'); }
@@ -172,7 +195,7 @@ function guestRecv(m) {
   else if (m.t === 'tolobby') { NET.inRace = false; api.toLobby(); showLobby(); }
 }
 function leave(reason) {
-  const wasMode = NET.mode; NET.mode = 'solo';
+  const wasMode = NET.mode; NET.mode = 'solo'; mig = null;
   try { peer && peer.destroy(); } catch (e) {}
   peer = null; NET.conns.clear(); NET.inRace = false;
   if (wasMode !== 'solo' && api) api.leftRoom();
