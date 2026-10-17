@@ -2,6 +2,7 @@
  * net.js — Online multiplayer: host-authoritative P2P over WebRTC using PeerJS (public PeerJS cloud broker).
  */
 import { charOf } from './chars.js';
+import { cleanLoadout, randomLoadout } from './parts.js';
 import { ROSTER } from './config/characters.js';
 import { LS } from './store.js';
 import { iceServers } from './netconfig.js';
@@ -94,7 +95,7 @@ async function createRoom(tries = 0, mg = null) {
   peer.on('open', () => {
     NET.mode = 'host';
     NET.you = 0;
-    NET.slots = [{ type: 'human', name, ready: true, id: 'host', char: api.getChar() }, null, null, null];
+    NET.slots = [{ type: 'human', name, ready: true, id: 'host', char: api.getChar(), parts: api.getParts() }, null, null, null];
     if (mg)
       mg.slots.forEach((s, i) => {
         if (i > 0 && s && s.type === 'bot') NET.slots[i] = s;
@@ -155,7 +156,16 @@ function hostRecv(conn, m) {
         old = s.type === 'human' && s.id !== conn.peer ? NET.conns.get(s.id) : null;
       const name = s.human || s.name,
         wasBot = s.type === 'bot';
-      NET.slots[own] = { type: 'human', name, ready: NET.inRace || !!(old && s.ready), id: conn.peer, char: s.char, tok, spec: s.spec };
+      NET.slots[own] = {
+        type: 'human',
+        name,
+        ready: NET.inRace || !!(old && s.ready),
+        id: conn.peer,
+        char: s.char,
+        parts: s.parts,
+        tok,
+        spec: s.spec,
+      };
       if (old) {
         NET.conns.delete(s.id);
         lastSeen.delete(s.id);
@@ -195,6 +205,7 @@ function hostRecv(conn, m) {
       ready: false,
       id: conn.peer,
       char: charOf(m.char).id,
+      parts: cleanLoadout(m.parts),
       tok,
       spec: NET.inRace,
     };
@@ -213,6 +224,11 @@ function hostRecv(conn, m) {
   } else if (m.t === 'char') {
     if (!NET.inRace) {
       NET.slots[i].char = charOf(m.id).id;
+      pushLobby();
+    }
+  } else if (m.t === 'parts') {
+    if (!NET.inRace) {
+      NET.slots[i].parts = cleanLoadout(m.lo);
       pushLobby();
     }
   } else if (m.t === 'chat') chat(`${NET.slots[i].name}: ${String(m.text).slice(0, 80)}`);
@@ -241,7 +257,16 @@ function hostDrop(peerId) {
   if (i < 0) return;
   const s = NET.slots[i];
   if (NET.inRace && !s.spec) {
-    NET.slots[i] = { type: 'bot', name: s.name + ' (봇)', ready: true, id: 'bot' + i, char: s.char, tok: s.tok, human: s.name };
+    NET.slots[i] = {
+      type: 'bot',
+      name: s.name + ' (봇)',
+      ready: true,
+      id: 'bot' + i,
+      char: s.char,
+      parts: s.parts,
+      tok: s.tok,
+      human: s.name,
+    };
     api.slotToBot(i);
     chat(`${s.name} 님의 연결이 끊겨 봇으로 대체됩니다.`);
   } else {
@@ -256,7 +281,7 @@ function addBot() {
   const used = new Set(NET.slots.filter(Boolean).map(s => s.char)),
     free = ROSTER.filter(r => !used.has(r.id)),
     d = free[(Math.random() * free.length) | 0] || ROSTER[f];
-  NET.slots[f] = { type: 'bot', name: d.name + ' 봇', ready: true, id: 'bot' + f, char: d.id };
+  NET.slots[f] = { type: 'bot', name: d.name + ' 봇', ready: true, id: 'bot' + f, char: d.id, parts: randomLoadout() };
   pushLobby();
 }
 export function setMyChar(id) {
@@ -264,6 +289,13 @@ export function setMyChar(id) {
     NET.slots[0].char = id;
     pushLobby();
   } else if (NET.mode === 'guest') NET.send({ t: 'char', id });
+}
+/** Our equipped parts changed (garage): host updates its slot, a guest tells the host; synced to everyone via the lobby. */
+export function setMyParts(lo) {
+  if (NET.mode === 'host' && NET.slots[0] && !NET.inRace) {
+    NET.slots[0].parts = cleanLoadout(lo);
+    pushLobby();
+  } else if (NET.mode === 'guest') NET.send({ t: 'parts', lo });
 }
 function removeSlot(i) {
   const s = NET.slots[i];
@@ -306,7 +338,7 @@ function startRace() {
   NET.slots.forEach(s => {
     if (s) s.spec = false;
   });
-  const slots = (NET.raceSlots = NET.slots.map(s => s && { type: s.type, name: s.name, char: s.char }));
+  const slots = (NET.raceSlots = NET.slots.map(s => s && { type: s.type, name: s.name, char: s.char, parts: s.parts }));
   for (const [pid, c] of NET.conns)
     if (c.open) c.send(JSON.stringify({ t: 'start', slots, you: slotOf(pid), map: NET.map, opts: NET.opts }));
   hideMP();
@@ -437,7 +469,7 @@ async function joinRoom(code, re = false) {
       clearTimeout(to);
       NET.mode = 'guest';
       NET.send = m => conn.open && conn.send(JSON.stringify(m));
-      NET.send({ t: 'hello', name, char: api.getChar(), tok: roomTok(code) });
+      NET.send({ t: 'hello', name, char: api.getChar(), parts: api.getParts(), tok: roomTok(code) });
       if (!re || mig) {
         mig = null;
         showLobby();

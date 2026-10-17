@@ -11,7 +11,7 @@ import { MAP_IDS, setMap, buildWorld, textSprite, path, strips, hAt, zoneAt, inR
 import { LAPS, CART, INTRO_S, SCOOP_P, MAXP, RIDE_S, CART_R, DIFFS } from './config/tuning.js';
 import { MAPS } from './config/maps.js';
 import { createFun, itemOdds } from './fun.js';
-import { NET, pushLobby, setMyChar } from './net.js';
+import { NET, pushLobby, setMyChar, setMyParts } from './net.js';
 import { makeCart, makeCustomer } from './models.js';
 import * as FX from './fx.js';
 import { createShop } from './shop.js';
@@ -20,6 +20,7 @@ import { charOf } from './chars.js';
 import { loadout, statMods, randomLoadout, cleanLoadout, addCoins, coins } from './parts.js';
 import { ROSTER } from './config/characters.js';
 import { openCharSel, tickCharPrev, setLineup } from './charsel.js';
+import { openGarage, tickGarage, garagePreview } from './garage.js';
 import { initAudio, sound, setEngine, setDrift } from './audio.js';
 import { LS, DEBUG } from './store.js';
 import { keys, analog } from './input.js';
@@ -1396,13 +1397,19 @@ function renderModes() {
           ([id, [n, ic]]) =>
             `<button class="${DIFF === id ? 'on' : ''}" data-diff="${id}" aria-pressed="${DIFF === id}" ${locked ? 'disabled' : ''}>${ic} ${n}</button>`,
         )
-        .join('');
+        .join('') +
+      (lobby
+        ? `<button class="${S.PSTATS ? 'on' : ''}" data-pst="1" aria-pressed="${!!S.PSTATS}" ${locked ? 'disabled' : ''} title="켜면 파츠 능력치(±5%)가 적용돼요. 끄면 외형만">🔧 파츠 능력치 ${S.PSTATS ? '켬' : '끔'}</button>`
+        : '');
     el.querySelectorAll('button').forEach(
       b =>
         (b.onclick = () => {
           if (locked || !(S.state === 'title' || S.state === 'lobby')) return;
-          DIFF = b.dataset.diff;
-          LS.set('cartDiff', DIFF);
+          if (b.dataset.pst) S.PSTATS = !S.PSTATS;
+          else {
+            DIFF = b.dataset.diff;
+            LS.set('cartDiff', DIFF);
+          }
           renderModes();
           if (host) {
             NET.opts = optsNow();
@@ -1989,6 +1996,7 @@ function frame(now) {
   render(dt);
   adapt(now);
   tickCharPrev(dt);
+  tickGarage(dt);
 }
 // a hidden host tab gets no rAF; keep the room simulated & snapshots flowing (browsers throttle this to ~1Hz)
 setInterval(() => {
@@ -2251,6 +2259,23 @@ function chooseChar(id) {
 }
 $('charBtn').onclick = () => openCharSel(chooseChar);
 $('lobbyChar').onclick = () => openCharSel(chooseChar);
+/** 🔧 차고 button labels show the coin balance. */
+function updGarBtn() {
+  const t = `🔧 차고 · 🪙 <b>${coins().toLocaleString('ko-KR')}</b>`;
+  $('garBtn').innerHTML = t;
+  $('lobbyGar').innerHTML = t;
+}
+Object.assign(ctx, { updGarBtn });
+function openGar() {
+  openGarage(S.MYCHAR, lo => {
+    if (S.state === 'title' || S.state === 'lobby') setCartParts(S.player, lo, S.MODE === 'solo' || S.PSTATS);
+    setMyParts(lo);
+    updGarBtn();
+  });
+}
+$('garBtn').onclick = openGar;
+$('lobbyGar').onclick = openGar;
+updGarBtn();
 updCharBtns();
 const boot = () => {
   loadMap(new URLSearchParams(location.search).get('map') || LS.get('cartMap') || 'mart');
@@ -2263,7 +2288,8 @@ Promise.race([document.fonts ? document.fonts.load('64px Jua') : Promise.resolve
 if (DEBUG)
   window.__game = {
     analog,
-    grantCoins: n => addCoins(n),
+    grantCoins: n => (addCoins(n), updGarBtn(), coins()),
+    garagePreview,
     get coins() {
       return coins();
     },

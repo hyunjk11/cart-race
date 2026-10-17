@@ -3,6 +3,7 @@
  * remote carts, speech/customer sync, MP race end. Split out of main.js; shared state comes from state.js (S, ctx).
  */
 import { NET, hostResults, initNet } from './net.js';
+import { loadout } from './parts.js';
 import * as THREE from 'three';
 import { flash, say } from './hud.js';
 import * as FX from './fx.js';
@@ -416,6 +417,7 @@ export function mpTick(dt) {
 export function init() {
   initNet({
     getChar: () => S.MYCHAR,
+    getParts: () => loadout(),
     getOpts: () => ctx.optsNow(),
     onOpts: ctx.onOpts,
     getMap: () => TR.MAP_ID,

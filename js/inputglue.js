@@ -65,7 +65,7 @@ export function init0() {
 export function init1() {
   if (ctx.IS_TOUCH) document.body.classList.add('touch');
   initInput({ pressEdge, touch: ctx.IS_TOUCH });
-  SCROLLABLE = '#title,#mp,#charSel,#finish,.scrolly';
+  SCROLLABLE = '#title,#mp,#charSel,#garage,#finish,.scrolly';
   ['touchmove', 'gesturestart', 'dblclick'].forEach(ev =>
     document.addEventListener(
       ev,
