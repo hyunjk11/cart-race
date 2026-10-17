@@ -2,10 +2,9 @@
 import { ROSTER, charOf } from './chars.js';
 import { LS } from './store.js';
 import { iceServers } from './netconfig.js';
-const $ = id => document.getElementById(id);
+import { $, escHtml } from './util.js';
 const PREFIX = 'cartrace-';
 const COLORS = ['#ff4f8b', '#43d17a', '#ffc107', '#9c5cff'];
-const MAX = 4;
 const qs = new URLSearchParams(location.search);
 let Peer = null,
   peer = null,
@@ -248,7 +247,6 @@ function hostDrop(peerId) {
   }
   pushLobby();
 }
-const BOTN = ['초록 봇', '노랑 봇', '보라 봇'];
 function addBot() {
   const f = NET.slots.findIndex(s => !s);
   if (f < 0) return;
@@ -579,7 +577,7 @@ function renderLobby() {
       (s, i) => `<div class="slot" style="border-color:${COLORS[i]}"><span class="dot" style="background:${COLORS[i]}"></span>
     ${
       s
-        ? `<span class="sch" title="${esc(charOf(s.char).name)}">${charOf(s.char).emoji}</span><b>${esc(s.name)}</b> <small class="scn">${esc(charOf(s.char).name)}</small> ${s.type === 'bot' ? '🤖' : i === 0 ? '👑' : ''} ${i === NET.you ? '<i>(나)</i>' : ''} <span class="rd ${s.ready ? 'on' : ''}">${s.type === 'bot' ? '봇' : s.ready ? '준비 완료' : '대기 중'}</span>
+        ? `<span class="sch" title="${escHtml(charOf(s.char).name)}">${charOf(s.char).emoji}</span><b>${escHtml(s.name)}</b> <small class="scn">${escHtml(charOf(s.char).name)}</small> ${s.type === 'bot' ? '🤖' : i === 0 ? '👑' : ''} ${i === NET.you ? '<i>(나)</i>' : ''} <span class="rd ${s.ready ? 'on' : ''}">${s.type === 'bot' ? '봇' : s.ready ? '준비 완료' : '대기 중'}</span>
       ${host && i > 0 ? `<button data-rm="${i}">${s.type === 'bot' ? '봇 제거' : '내보내기'}</button>` : ''}`
         : `<span class="empty">빈 자리</span>`
     }</div>`,
@@ -602,7 +600,6 @@ function renderLobby() {
       : '참가자 2명 이상(봇 포함) + 모두 준비 시 시작할 수 있어요.'
     : '호스트가 경주를 시작할 때까지 기다려 주세요.';
 }
-const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 // heartbeat: detect silent disconnects (closed tabs / lost networks)
 let hbLast = performance.now();

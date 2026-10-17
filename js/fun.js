@@ -4,6 +4,7 @@ import * as CANNON from 'cannon-es';
 import * as TR from './track.js';
 const { hAt, atLane: tAtLane, straightAt } = TR;
 import { makeCart } from './models.js';
+import { lm } from './util.js';
 
 export const ITEMS = {
   banana: { icon: '🍌', name: '바나나 껍질' },
@@ -23,7 +24,6 @@ export function itemOdds(t) {
     s = w.reduce((a, b) => a + b, 0);
   return w.map(x => x / s);
 }
-const lm = c => new THREE.MeshLambertMaterial({ color: c });
 
 function disposeObj(o) {
   o.traverse(n => {

@@ -2,25 +2,26 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import * as TR from './track.js';
 import { LAPS, MAPS, MAP_IDS, setMap, buildWorld, textSprite, path, strips, hAt, zoneAt, inRect, atLane, tangentAt } from './track.js';
-import { createFun, ITEMS, itemOdds } from './fun.js';
+import { createFun, itemOdds } from './fun.js';
 import { NET, pushLobby, setMyChar } from './net.js';
 import { makeCart, makeCustomer } from './models.js';
 import * as FX from './fx.js';
-import { createShop, T_LIMIT, won } from './shop.js';
+import { createShop, T_LIMIT } from './shop.js';
 import { ROSTER, charOf } from './chars.js';
-import { openCharSel, tickCharPrev, setLineup, renderCharCards } from './charsel.js';
-import { initAudio, suspendAudio, sound, setEngine, setDrift, setMuted, isMuted, onMuteChange } from './audio.js';
+import { openCharSel, tickCharPrev, setLineup } from './charsel.js';
+import { initAudio, sound, setEngine, setDrift } from './audio.js';
 import { LS, DEBUG } from './store.js';
-import { keys, analog, initInput } from './input.js';
-import { initHelp, isHelpOpen, tutorialTick, motionOK, maybeShopTutorial } from './help.js';
+import { keys, analog } from './input.js';
+import { motionOK, maybeShopTutorial } from './help.js';
 import * as __hud from './hud.js';
 import { flash, say, chatter, updateBubbles, setupMinimap, drawMinimap, announce, specUi, updateHud, updCharBtns } from './hud.js';
 import * as __results from './results.js';
-import { endRace, shopRows, showResults, toLobby, leftRoom } from './results.js';
+import { endRace } from './results.js';
 import * as __inputglue from './inputglue.js';
 import { startGame } from './inputglue.js';
 import * as __netglue from './netglue.js';
 import { netSay, netFollow, applyRemote, mpFinish, guestBumps, mirror, guestCustomers, mpTick } from './netglue.js';
+import { $, pick, r2, stripTags } from './util.js';
 // G:begin — shared state for the split-out modules (generated accessors; live bindings into this file)
 const G = {
   get $() {
@@ -87,7 +88,7 @@ const G = {
     return endSpectate;
   },
   get esc() {
-    return esc;
+    return stripTags;
   },
   get finishOrder() {
     return finishOrder;
@@ -336,7 +337,6 @@ __results.bind(G);
 __netglue.bind(G);
 // G:end
 
-const $ = id => document.getElementById(id);
 const QUALITY = LS.get('cartQuality') || 'auto'; // auto | low | high
 const renderer = new THREE.WebGLRenderer({
   antialias: QUALITY === 'high' || (QUALITY === 'auto' && !matchMedia('(pointer: coarse)').matches),
@@ -614,7 +614,6 @@ function spawnProduct(x, y, z, vx, vy, vz) {
 }
 
 // ---------- customers ----------
-const shirt = [0xef5350, 0x42a5f5, 0x66bb6a, 0xffa726, 0xab47bc, 0x26c6da, 0x8d6e63, 0xec407a];
 const customers = [];
 const custShape = new CANNON.Box(new CANNON.Vec3(0.3, 0.85, 0.2));
 function pickTarget(cu) {
@@ -740,8 +739,7 @@ for (let k = 0; k < 16; k++) {
   const cu = { g, holder, state: 'walk', t: 0, x: 0, z: 0, tx: 0, tz: 0, sp: 1 + Math.random() * 0.8, body: null };
   customers.push(cu);
 }
-const SCOOP = DEBUG && new URLSearchParams(location.search).has('scoop') ? +new URLSearchParams(location.search).get('scoop') : 0.3,
-  pick0 = 0;
+const SCOOP = DEBUG && new URLSearchParams(location.search).has('scoop') ? +new URLSearchParams(location.search).get('scoop') : 0.3;
 function scoop(cu, c) {
   c.riders = c.riders || [];
   cu.state = 'ride';
@@ -1214,7 +1212,7 @@ function updateCart(c, dt) {
         }
       }
       if (GMODE !== 'shop') paLap(c);
-      else if (FIN(c) && !finishOrder.length) paSay(`${esc(c.name)} 고객님 1등으로 계산 완료~! 축하드립니다!`);
+      else if (FIN(c) && !finishOrder.length) paSay(`${stripTags(c.name)} 고객님 1등으로 계산 완료~! 축하드립니다!`);
     }
     if (FIN(c) && !c.finished && state === 'race') {
       c.finished = true;
@@ -1319,7 +1317,7 @@ function interactions(dt) {
             o.ramT = 1.5;
             shop.hit(o, 'ram');
             FX.comic(o.x, 2.2 + hAt(o.x, o.z), o.z, pick(['쾅!', 'BAM!']), '#ff7043');
-            if (c === player) flash(`${esc(o.name)} 카트를 들이받았다! 물건이 떨어졌다 💥`);
+            if (c === player) flash(`${stripTags(o.name)} 카트를 들이받았다! 물건이 떨어졌다 💥`);
           }
         }
       }
@@ -1478,7 +1476,6 @@ let autoAccel = LS.get('cartAuto', IS_TOUCH ? '1' : '0') === '1';
 __inputglue.init2();
 
 let shake = 0;
-const pick = a => a[(Math.random() * a.length) | 0];
 // ---------- speech bubbles (HTML overlay projected to screen) ----------
 const bubbleLayer = $('bubbles'),
   bubbles = [];
@@ -1611,8 +1608,6 @@ function shopFx(c, f) {
     }
   }
 }
-
-const esc = t => String(t).replace(/[<>&]/g, '');
 
 function renderModes() {
   const host = NET.mode === 'host',
@@ -1991,7 +1986,6 @@ let MODE = 'solo',
   snapN = 0,
   mpDone = false,
   firstFinT = 0;
-const r2 = v => Math.round(v * 100) / 100;
 const GRID = i => {
   const p = path[0],
     [tx, tz] = tangentAt(0),

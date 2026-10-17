@@ -6,8 +6,8 @@
 // To enable TURN, add entries to TURN below, e.g. after signing up at metered.ca:
 //   { urls: ['turn:<you>.metered.live:80', 'turn:<you>.metered.live:443', 'turns:<you>.metered.live:443?transport=tcp'], username: '…', credential: '…' }
 // (or fetch them at runtime from the provider's REST API and push into TURN before creating a room).
-export const STUN = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:global.stun.twilio.com:3478' }];
-export const TURN = [];
+const STUN = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:global.stun.twilio.com:3478' }];
+const TURN = [];
 // testing hook: ?turn=<url>,<user>,<cred> (e.g. a self-hosted coturn) adds one TURN server for this session
 const q = new URLSearchParams(location.search).get('turn');
 if (q) {

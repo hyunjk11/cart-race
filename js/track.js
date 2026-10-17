@@ -3,9 +3,9 @@ import * as CANNON from 'cannon-es';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // Map system: each map is a rectilinear closed loop of vertices (travel order) with per-map aisle half-width,
 // corner radius, wall style, zones (ice / moving walkway / speed bumps / escalator), elevation and obstacles.
-export const SD = 1.6,
-  SH = 3.2,
-  LAPS = 3;
+const SD = 1.6,
+  SH = 3.2;
+export const LAPS = 3;
 export let HW = 6,
   MAP = null,
   MAP_ID = 'mart';

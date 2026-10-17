@@ -5,7 +5,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // ---------- shared materials ----------
 let _grad = null;
-export function toonGrad() {
+function toonGrad() {
   if (_grad) return _grad;
   const d = new Uint8Array([90, 170, 255]);
   _grad = new THREE.DataTexture(d, 3, 1, THREE.RedFormat);
@@ -14,9 +14,9 @@ export function toonGrad() {
   return _grad;
 }
 export const vcToon = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGrad() });
-export const outlineMat = new THREE.MeshBasicMaterial({ color: 0x3b2433, side: THREE.BackSide });
+const outlineMat = new THREE.MeshBasicMaterial({ color: 0x3b2433, side: THREE.BackSide });
 const _c = new THREE.Color();
-export function part(g, col, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1, rx = 0, ry = 0, rz = 0) {
+function part(g, col, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1, rx = 0, ry = 0, rz = 0) {
   g.scale(sx, sy, sz);
   g.rotateX(rx);
   g.rotateY(ry);
@@ -34,7 +34,7 @@ export function part(g, col, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1, rx = 0
   for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(k)) g.deleteAttribute(k);
   return g;
 }
-export const merge = parts => {
+const merge = parts => {
   const m = mergeGeometries(
     parts.map(p => (p.index ? p.toNonIndexed() : p)),
     false,
@@ -286,7 +286,7 @@ export function facePatch(r, sx = 1.05, sy = 0.95) {
   g.scale(sx, sy, 1);
   return g;
 }
-export function faceMat() {
+function faceMat() {
   const m = new THREE.MeshBasicMaterial({ map: getFaceTex().clone(), transparent: true, depthWrite: false });
   m.map.needsUpdate = true;
   return m;

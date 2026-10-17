@@ -1,9 +1,9 @@
 // Character select: rotating 3D preview + roster cards (title & lobby).
 import * as THREE from 'three';
-import { ROSTER, CHAR, charOf, makeRacer, makeDeco, statBar } from './chars.js';
+import { ROSTER, charOf, makeRacer, makeDeco, statBar } from './chars.js';
 import { LS } from './store.js';
+import { $ } from './util.js';
 
-const $ = id => document.getElementById(id);
 let preview = null,
   sel = null,
   onPick = null,
@@ -91,7 +91,7 @@ function showChar(id) {
   $('charInfo').innerHTML =
     `<div class="cni">${def.emoji} <b>${def.name}</b></div><div class="cti">${def.title}</div><p>${def.desc}</p>${bars('속도', statBar(def.st.spd, 'spd'))}${bars('핸들', statBar(def.st.hdl))}${bars('드리프트', statBar(def.st.drf))}`;
 }
-export function renderCharCards(el, current, { locked = false, onClick } = {}) {
+function renderCharCards(el, current, { locked = false, onClick } = {}) {
   if (!el) return;
   el.innerHTML = ROSTER.map(
     d =>
@@ -180,4 +180,3 @@ export function tickCharPrev(dt) {
   }
   P.r.render(P.sc, P.cam);
 }
-export { ROSTER, CHAR, charOf };

@@ -13,7 +13,7 @@ export const ACTIONS = [
   ['item', '아이템 / 줍기', 'KeyE', ['KeyE', 'ControlLeft', 'ControlRight']],
 ];
 const DEFAULT_CODES = new Set(ACTIONS.flatMap(a => a[3]));
-export const RESERVED = ['KeyR', 'KeyM', 'KeyT', 'Enter', 'Escape', 'Tab', 'F1', 'Slash'];
+const RESERVED = ['KeyR', 'KeyM', 'KeyT', 'Enter', 'Escape', 'Tab', 'F1', 'Slash'];
 let binds = {};
 function loadBinds() {
   let saved = {};

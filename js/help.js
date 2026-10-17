@@ -1,18 +1,7 @@
 // '?' help & settings panel, first-race tips, 3-step shopping tutorial, reduced-motion preference
 import { LS } from './store.js';
-import {
-  ACTIONS,
-  getBinds,
-  setBind,
-  resetBinds,
-  keyName,
-  actionKeys,
-  captureNextKey,
-  steerMode,
-  applySteerMode,
-  RESERVED,
-} from './input.js';
-const $ = id => document.getElementById(id);
+import { ACTIONS, getBinds, setBind, resetBinds, keyName, actionKeys, captureNextKey, steerMode, applySteerMode } from './input.js';
+import { $ } from './util.js';
 const el = (tag, attrs = {}, html = '') => {
   const e = document.createElement(tag);
   for (const k in attrs) e.setAttribute(k, attrs[k]);
@@ -23,7 +12,7 @@ let api = null,
   open = false;
 // ---------- reduced motion ----------
 const mq = matchMedia('(prefers-reduced-motion: reduce)');
-export const motionPref = () => LS.get('cartMotion', 'auto'); // auto | reduce | full
+const motionPref = () => LS.get('cartMotion', 'auto'); // auto | reduce | full
 export const motionOK = () => {
   const p = motionPref();
   return p === 'full' ? true : p === 'reduce' ? false : !mq.matches;
@@ -91,7 +80,7 @@ export function tutorialTick(s) {
   tip.classList.add('show');
   tipUntil = now + 6000;
 }
-export function hideTip() {
+function hideTip() {
   tipUntil = 0;
   $('tip')?.classList.remove('show');
 }
@@ -245,7 +234,7 @@ function onClick(e) {
     return;
   }
 }
-export function openHelp(which) {
+function openHelp(which) {
   if (which) tab = which;
   open = true;
   render();
@@ -254,7 +243,7 @@ export function openHelp(which) {
   hideTip();
   $('helpClose').focus();
 }
-export function closeHelp() {
+function closeHelp() {
   open = false;
   $('help2').classList.add('hidden');
   api.pause?.(false);

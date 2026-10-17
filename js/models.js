@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeRacer, makeDeco, charOf, vcToon as vcToonC, getFaceTex as racerFaceTex, facePatch, FACE as RFACE } from './chars.js';
-const lm = c => new THREE.MeshLambertMaterial({ color: c });
-const skin = lm(0xf1c27d);
+import { lm } from './util.js';
 
 // Simple person; pivot at feet, faces +z
 // wire grid on a box: lines along each face
@@ -282,132 +281,10 @@ const merge = parts => {
   return m;
 };
 // expression atlas: 0 normal, 1 happy, 2 dizzy, 3 angry, 4 shock
-export const FACE = RFACE;
-let faceTex = null;
-function getFaceTex() {
-  if (faceTex) return faceTex;
-  const S = 128,
-    c = document.createElement('canvas');
-  c.width = S * 5;
-  c.height = S;
-  const g = c.getContext('2d');
-  g.lineCap = 'round';
-  g.lineJoin = 'round';
-  for (let f = 0; f < 5; f++) {
-    const ox = f * S,
-      ex = [ox + 40, ox + 88],
-      ey = 56;
-    g.fillStyle = 'rgba(255,120,150,0.55)';
-    for (const x of [ox + 22, ox + 106]) {
-      g.beginPath();
-      g.ellipse(x, 80, 13, 8, 0, 0, 7);
-      g.fill();
-    }
-    g.strokeStyle = g.fillStyle = '#2a1a22';
-    g.lineWidth = 6;
-    if (f === 0) {
-      for (const x of ex) {
-        g.beginPath();
-        g.ellipse(x, ey, 8, 11, 0, 0, 7);
-        g.fill();
-        g.fillStyle = '#fff';
-        g.beginPath();
-        g.arc(x + 3, ey - 4, 3, 0, 7);
-        g.fill();
-        g.fillStyle = '#2a1a22';
-      }
-      g.beginPath();
-      g.arc(ox + 64, 76, 10, 0.2, Math.PI - 0.2);
-      g.stroke();
-    }
-    if (f === 1) {
-      for (const x of ex) {
-        g.beginPath();
-        g.arc(x, ey + 4, 10, Math.PI + 0.3, -0.3);
-        g.stroke();
-      }
-      g.fillStyle = '#c2185b';
-      g.beginPath();
-      g.arc(ox + 64, 74, 14, 0, Math.PI);
-      g.fill();
-    }
-    if (f === 2) {
-      for (const x of ex) {
-        g.beginPath();
-        for (let a = 0; a < 12; a += 0.3) {
-          const r = a * 1.1;
-          g.lineTo(x + Math.cos(a) * r, ey + Math.sin(a) * r);
-        }
-        g.lineWidth = 3.5;
-        g.stroke();
-      }
-      g.lineWidth = 5;
-      g.beginPath();
-      for (let k = 0; k <= 4; k++) g.lineTo(ox + 48 + k * 8, 86 + (k % 2 ? -5 : 5));
-      g.stroke();
-    }
-    if (f === 3) {
-      for (const [x, s] of [
-        [ex[0], 1],
-        [ex[1], -1],
-      ]) {
-        g.beginPath();
-        g.moveTo(x - 13 * s, ey - 20);
-        g.lineTo(x + 9 * s, ey - 10);
-        g.stroke();
-        g.beginPath();
-        g.arc(x, ey + 2, 6, 0, 7);
-        g.fill();
-      }
-      g.beginPath();
-      g.arc(ox + 64, 92, 11, Math.PI + 0.3, -0.3);
-      g.stroke();
-      g.strokeStyle = '#e53935';
-      g.lineWidth = 5;
-      const mx = ox + 108,
-        my = 22;
-      for (const [a, b] of [
-        [-1, -1],
-        [1, -1],
-        [-1, 1],
-        [1, 1],
-      ]) {
-        g.beginPath();
-        g.moveTo(mx + a * 4, my + b * 4);
-        g.lineTo(mx + a * 12, my + b * 4);
-        g.moveTo(mx + a * 4, my + b * 4);
-        g.lineTo(mx + a * 4, my + b * 12);
-        g.stroke();
-      }
-    }
-    if (f === 4) {
-      for (const x of ex) {
-        g.fillStyle = '#fff';
-        g.beginPath();
-        g.arc(x, ey, 13, 0, 7);
-        g.fill();
-        g.lineWidth = 3;
-        g.strokeStyle = '#2a1a22';
-        g.stroke();
-        g.fillStyle = '#2a1a22';
-        g.beginPath();
-        g.arc(x, ey, 5, 0, 7);
-        g.fill();
-      }
-      g.beginPath();
-      g.ellipse(ox + 64, 88, 9, 12, 0, 0, 7);
-      g.fill();
-    }
-  }
-  faceTex = new THREE.CanvasTexture(c);
-  faceTex.colorSpace = THREE.SRGBColorSpace;
-  faceTex.repeat.set(0.2, 1);
-  return faceTex;
-}
+const FACE = RFACE;
 let _cfg = null;
 const custFaceG = () => _cfg || (_cfg = facePatch(0.365));
-const faceG = new THREE.PlaneGeometry(0.5, 0.5),
-  starMat = new THREE.MeshBasicMaterial({ color: 0xffeb3b });
+const starMat = new THREE.MeshBasicMaterial({ color: 0xffeb3b });
 const starG = (() => {
   const parts = [];
   for (let k = 0; k < 3; k++) {

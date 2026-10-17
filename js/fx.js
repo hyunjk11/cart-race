@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { makeChibi, makeCustomer } from './models.js';
 import { makeRacer } from './chars.js';
-const $ = id => document.getElementById(id);
+import { $ } from './util.js';
 let LOW = false,
   cam = null;
 export function initFx(o) {
