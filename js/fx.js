@@ -4,7 +4,7 @@ import { makeChibi, makeCustomer } from './models.js';
 import { makeRacer } from './chars.js';
 const $ = id => document.getElementById(id);
 let LOW = false, cam = null;
-export function initFx(o) { LOW = o.low; cam = o.camera; }
+export function initFx(o) { LOW = o.low; cam = o.camera; if (LOW) CN = 70; }
 
 // ---------- comic text ("POW!") ----------
 const comics = []; const _v = new THREE.Vector3();
@@ -22,7 +22,7 @@ export function screenFlash(col = '#fff', a = 0.45) { if (document.body.classLis
 export function setSpeedLines(k) { const s = $('speedlines'); if (LOW) { s.style.opacity = 0; return; } s.style.opacity = k.toFixed(2); }
 
 // ---------- confetti (instanced) ----------
-const CN = 260; let conf = null; const cp = [], cv = [], cr = []; let cAlive = 0;
+let CN = 260; let conf = null; const cp = [], cv = [], cr = []; let cAlive = 0;
 function ensureConf() { if (conf) return conf;
   const g = new THREE.PlaneGeometry(0.16, 0.24); conf = new THREE.InstancedMesh(g, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }), CN); conf.frustumCulled = false;
   const cols = [0xff4081, 0xffeb3b, 0x40c4ff, 0x69f0ae, 0xff9100, 0xe040fb], c = new THREE.Color();

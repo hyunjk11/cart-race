@@ -41,7 +41,7 @@ const hashStr = t => { let h = 7; for (const ch of t) h = Math.imul(h, 31) + ch.
 const _rand = Math.random; { let a = 20261016; Math.random = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const _m4 = new THREE.Matrix4().makeScale(0, 0, 0);
 function removeShelfItems(x, z, n) { // hide products near impact
-  let removed = 0; for (let i = 0; i < trk.items.length && removed < n; i++) { if (trk.hidden[i]) continue; const it = trk.items[i]; if (Math.abs(it[0] - x) < 1.6 && Math.abs(it[2] - z) < 1.6) { trk.hidden[i] = 1; const im = trk.meshes[it[3]]; im.setMatrixAt(it[4], _m4); im.instanceMatrix.needsUpdate = true; removed++; } }
+  let removed = 0; for (let i = 0; i < trk.items.length && removed < n; i++) { if (trk.hidden[i]) continue; const it = trk.items[i]; if (Math.abs(it[0] - x) < 1.6 && Math.abs(it[2] - z) < 1.6) { trk.hidden[i] = 1; if (it[4] >= 0) { const im = trk.meshes[it[3]]; im.setMatrixAt(it[4], _m4); im.instanceMatrix.needsUpdate = true; } removed++; } }
   return removed; }
 
 // ---------- input ----------
@@ -165,7 +165,7 @@ function ridePose(cu, c, seat, n) { // sit in the basket: hips on the basket flo
 function retarget(cu) { delete cu.pi; pickTarget(cu); }
 const insideShelf = (x, z) => strips.some(s => !s.off && x > s.x0 && x < s.x1 && z > s.z0 && z < s.z1);
 for (let k = 0; k < 16; k++) {
-  const g = makeCustomer();
+  const g = makeCustomer({ low: LOWFX });
   const holder = new THREE.Group(); g.root.position.y = -0.85; holder.add(g.root); scene.add(holder);
   const cu = { g, holder, state: 'walk', t: 0, x: 0, z: 0, tx: 0, tz: 0, sp: 1 + Math.random() * 0.8, body: null };
   customers.push(cu);
@@ -462,7 +462,7 @@ setInterval(() => { if (state !== 'race') return; const sorted = [...carts].sort
 // ---------- particle puffs ----------
 const puffs = [], puffG = new THREE.SphereGeometry(0.25, 6, 5);
 function puff(x, y, z, col, n) { for (let i = 0; i < n; i++) { let p = puffs.find(q => q.life <= 0);
-  if (!p) { if (puffs.length > (QUALITY === 'low' ? 24 : 60)) return; p = { m: new THREE.Mesh(puffG, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false })), life: 0, v: new THREE.Vector3() }; scene.add(p.m); puffs.push(p); }
+  if (!p) { if (puffs.length > (LOWFX ? 14 : 60)) return; p = { m: new THREE.Mesh(puffG, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false })), life: 0, v: new THREE.Vector3() }; scene.add(p.m); puffs.push(p); }
   p.m.material.color.setHex(col); p.m.visible = true; p.m.position.set(x, y + hAt(x, z), z); p.v.set(Math.random() * 4 - 2, Math.random() * 3, Math.random() * 4 - 2); p.life = 0.6 + Math.random() * 0.3; } }
 function updatePuffs(dt) { for (const p of puffs) { if (p.life <= 0) continue; p.life -= dt; p.m.position.addScaledVector(p.v, dt); p.v.multiplyScalar(0.92);
   p.m.scale.setScalar(1 + (1 - p.life) * 2); p.m.material.opacity = Math.max(0, p.life); if (p.life <= 0) p.m.visible = false; } }
@@ -558,7 +558,7 @@ const optsNow = () => ({ gmode: GMODE, tlim: TLIM, diff: DIFF });
 function onOpts(o) { if (!o) return; GMODE = o.gmode === 'shop' ? 'shop' : 'race'; TLIM = !!o.tlim; if (DIFFS[o.diff]) DIFF = o.diff; if (shop) shop.setActive(GMODE === 'shop'); renderModes(); }
 function makeFun() {
   const s0 = new Set(scene.children), b0 = new Set(world.bodies);
-  fun = createFun({ scene, world, carts, path, N, strips, customers, sound, get player() { return player; }, textSprite, say, puff, flash, spawnProduct, stats, insideShelf, circlePush, announce, retarget, pushOut,
+  fun = createFun({ low: LOWFX, scene, world, carts, path, N, strips, customers, sound, get player() { return player; }, textSprite, say, puff, flash, spawnProduct, stats, insideShelf, circlePush, announce, retarget, pushOut,
     shakeIt: k => { shake = Math.max(shake, k); }, lights: { hemi, dl, dl2 }, extraObs, comic: FX.comic, screenFlash: FX.screenFlash, onHit: (c, by) => { if (SHOPON() && MODE !== 'guest' && state === 'race') shop.hit(c, 'hit'); } });
   funOwned = { objs: scene.children.filter(o => !s0.has(o)), bodies: world.bodies.filter(b => !b0.has(b)) };
 }
@@ -604,8 +604,8 @@ function loadMap(id) {
   for (const m of mirror) m.mesh.visible = false;
   for (const b of bubbles.splice(0)) b.el.remove();
   seeded(hashStr(id) + 20261016, () => {
-    setMap(id); N = path.length; trk = buildWorld(scene, world);
-    const T = TR.MAP.theme; scene.background.set(T.bg); scene.fog.color.set(T.fogCol ?? T.bg); scene.fog.near = T.fog[0]; scene.fog.far = T.fog[1]; hemi.intensity = T.hemi; dl.intensity = T.dl; dl2.intensity = T.dl2;
+    setMap(id); N = path.length; trk = buildWorld(scene, world, { low: LOWFX });
+    const T = TR.MAP.theme; scene.background.set(T.bg); scene.fog.color.set(T.fogCol ?? T.bg); scene.fog.near = T.fog[0] * (LOWFX ? 0.6 : 1); scene.fog.far = T.fog[1] * (LOWFX ? 0.7 : 1); camera.far = LOWFX ? scene.fog.far + 4 : 300; camera.updateProjectionMatrix(); hemi.intensity = T.hemi; dl.intensity = T.dl; dl2.intensity = T.dl2;
     if (checkout) checkout.dispose(); checkout = FX.buildCheckout(scene, { path, strips, HW: TR.HW, inSign: TR.MAP.inSign, hAt, textSprite, tangentAt });
     makeFun();
     if (shop) shop.dispose(); shop = createShop({ scene, carts, path, N, HW: TR.HW, atLane, insideShelf: solidAt, hAt, low: LOWFX, mapId: TR.MAP_ID, obstacles: () => fun.obstacles, paSay: t => paSay(t), onFx: shopFx }); shop.setActive(GMODE === 'shop');
@@ -912,6 +912,7 @@ function render(dt) {
   if (SHOPON()) { shop.render(dt, player); shopHud(); } }
   specUi();
   document.body.classList.toggle('podium', FX.podiumActive()); FX.setPodiumShift($('finish').classList.contains('shop') ? 0.2 : 0);
+  if (LOWFX) for (const cu of customers) { const d = camera.position.distanceTo(cu.holder.position); cu.g.lod(d > 38 ? 2 : d > 13 ? 1 : 0); } // distance LOD (low quality)
   if (FX.podiumActive()) FX.renderPodium(renderer, dt); else renderer.render(scene, camera);
 }
 let shopHudSig = '';

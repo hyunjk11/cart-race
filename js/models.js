@@ -143,8 +143,8 @@ export function makeCustomer(opt = {}) {
   const body = new THREE.Mesh(merge(bp), vcMat); bob.add(body);
   // head + hair
   const headG = new THREE.Group(); headG.position.y = 1.3; bob.add(headG);
-  const hp = [part(new THREE.SphereGeometry(0.36, 20, 16), skinC, 0, 0, 0, 1.05, 0.95, 1)];
-  const hemi = (c, y = 0.03, sc = 1) => part(new THREE.SphereGeometry(0.38 * sc, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), c, 0, y, -0.02, 1.05, 1, 1, -0.3);
+  const LQ = !!opt.low, hp = [part(new THREE.SphereGeometry(0.36, LQ ? 12 : 20, LQ ? 9 : 16), skinC, 0, 0, 0, 1.05, 0.95, 1)];
+  const hemi = (c, y = 0.03, sc = 1) => part(new THREE.SphereGeometry(0.38 * sc, LQ ? 10 : 16, LQ ? 6 : 10, 0, Math.PI * 2, 0, Math.PI * 0.55), c, 0, y, -0.02, 1.05, 1, 1, -0.3);
   if (style === 'short') hp.push(hemi(hairC));
   if (style === 'bun') hp.push(hemi(hairC), part(new THREE.SphereGeometry(0.15, 10, 8), hairC, 0, 0.36, -0.12));
   if (style === 'pig') hp.push(hemi(hairC), part(new THREE.SphereGeometry(0.13, 10, 8), hairC, -0.36, -0.05, -0.05, 1, 1.4, 1), part(new THREE.SphereGeometry(0.13, 10, 8), hairC, 0.36, -0.05, -0.05, 1, 1.4, 1));
@@ -171,7 +171,13 @@ export function makeCustomer(opt = {}) {
   let curFace = -1; const blinkPh = Math.random() * 4;
   // bigger, cuter head (chibi proportions)
   headG.scale.setScalar(1.18); headG.position.y = 1.36;
+  // low quality: one merged rest-pose proxy (1 draw call instead of ~8) for customers at a distance; lod(2) hides entirely
+  let proxy = null, lodL = 0;
+  if (LQ) { root.updateMatrixWorld(true); const inv = root.matrixWorld.clone().invert(), gs = [];
+    for (const m of [body, head, ...arms.map(a => a.children[0]), ...legs.map(l => l.children[0])]) { const g = m.geometry.clone(); g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld)); gs.push(g); }
+    proxy = new THREE.Mesh(mergeGeometries(gs, false), vcMat); gs.forEach(g => g.dispose()); proxy.visible = false; root.add(proxy); }
   const api = { root, age, scale: sc, basket,
+    lod(l) { if (!proxy || l === lodL) return; lodL = l; bob.visible = l === 0; legs.forEach(g => g.visible = l === 0); proxy.visible = l === 1; },
     face(name) { let f = FACE[name] ?? 0; if (f === 0 && ((performance.now() / 1000 + blinkPh) % 4) < 0.13) f = 1; if (f !== curFace) { curFace = f; fm.map.offset.x = f / 9; } },
     stars(on, t) { stars.visible = on; if (on) stars.rotation.y = t * 5; },
     walk(ph, k = 1) { legs[0].rotation.x = Math.sin(ph) * 0.6; legs[1].rotation.x = -Math.sin(ph) * 0.6; arms[0].rotation.set(basket ? -0.15 : -Math.sin(ph) * 0.5, 0, 0); arms[1].rotation.set(Math.sin(ph) * 0.5, 0, 0);

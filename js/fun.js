@@ -25,7 +25,7 @@ export function createFun(G) {
   const obstacles = [], fixedObs = []; // for AI avoidance: {x,z,r}
 
   // ---------- skid marks (instanced, fading by shrinking) ----------
-  const SK = 300, skG = new THREE.PlaneGeometry(0.16, 0.5); skG.rotateX(-Math.PI / 2);
+  const SK = G.low ? 100 : 300, skG = new THREE.PlaneGeometry(0.16, 0.5); skG.rotateX(-Math.PI / 2);
   const skids = new THREE.InstancedMesh(skG, new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.55, depthWrite: false }), SK);
   skids.frustumCulled = false; const skAge = new Float32Array(SK).fill(99), skPos = []; let skI = 0;
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v3 = new THREE.Vector3(), s3 = new THREE.Vector3();

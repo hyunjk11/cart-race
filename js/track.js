@@ -151,7 +151,7 @@ const KINDS = {
   pop: { g: () => new THREE.BoxGeometry(0.12, 0.42, 0.06), cols: [0xff7043, 0xab47bc, 0x26c6da, 0xffee58], sy: [0.9, 1.1] },
 };
 
-export function buildWorld(scene, world) {
+export function buildWorld(scene, world, opt = {}) {
   const M = MAP, T = M.theme, root = new THREE.Group(); scene.add(root); const bodies = [], ticks = [], doors = [];
   const add = o => { root.add(o); return o; }, addBody = b => { world.addBody(b); bodies.push(b); return b; };
   const box = (w, h, d, mat, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); return add(m); };
@@ -250,9 +250,11 @@ export function buildWorld(scene, world) {
   if (kinds.length) items.forEach((p, i) => { const k = (Math.floor(i / 7) + (p[1] % 1.5 < 0.5 ? 3 : 0)) % kinds.length; p.push(k, buckets[k].length); buckets[k].push(p); });
   const m4 = new THREE.Matrix4(), col = new THREE.Color();
   const meshes = kinds.map((K, k) => { const im = new THREE.InstancedMesh(K.g, new THREE.MeshLambertMaterial(), Math.max(1, buckets[k].length)); K.g.computeBoundingBox();
-    buckets[k].forEach((p, i) => { const sy = K.sy[0] + Math.random() * (K.sy[1] - K.sy[0]), hh = K.g.boundingBox.max.y * sy;
-      m4.makeScale(1, sy, 1); m4.setPosition(p[0], p[1] + hh, p[2]); im.setMatrixAt(i, m4); im.setColorAt(i, col.setHex(K.cols[(Math.random() * K.cols.length) | 0])); });
-    im.count = buckets[k].length; add(im); return im; });
+    // low quality draws every other product (random draws still consumed so the seeded store stays identical across clients)
+    let j = 0; buckets[k].forEach((p, i) => { const sy = K.sy[0] + Math.random() * (K.sy[1] - K.sy[0]), hh = K.g.boundingBox.max.y * sy, cc = K.cols[(Math.random() * K.cols.length) | 0];
+      if (opt.low && i % 2) { p[4] = -1; return; } p[4] = j;
+      m4.makeScale(1, sy, 1); m4.setPosition(p[0], p[1] + hh, p[2]); im.setMatrixAt(j, m4); im.setColorAt(j, col.setHex(cc)); j++; });
+    im.count = j; add(im); return im; });
   if (!kinds.length) items.length = 0;
   // inner decorative aisles (mart)
   if (M.decor === 'aisles') { const b = M.verts, X = Math.max(...b.map(v => v[0])), Z = Math.max(...b.map(v => v[1]));
