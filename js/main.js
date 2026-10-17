@@ -17,9 +17,12 @@ import * as __hud from './hud.js';
 import { flash, say, chatter, updateBubbles, setupMinimap, drawMinimap, announce, specUi, updateHud, updCharBtns } from './hud.js';
 import * as __results from './results.js';
 import { endRace, shopRows, showResults, toLobby, leftRoom } from './results.js';
+import * as __inputglue from './inputglue.js';
+import { startGame } from './inputglue.js';
 // G:begin — shared state for the split-out modules (generated accessors; live bindings into this file)
 const G = {
   get $() { return $; },
+  get autoAccel() { return autoAccel; }, set autoAccel(v) { autoAccel = v; },
   get bubbleLayer() { return bubbleLayer; },
   get bubbles() { return bubbles; },
   get camera() { return camera; },
@@ -36,16 +39,20 @@ const G = {
   get fmt() { return fmt; },
   get fun() { return fun; }, set fun(v) { fun = v; },
   get getBest() { return getBest; },
+  get GMODE() { return GMODE; }, set GMODE(v) { GMODE = v; },
   get IS_TOUCH() { return IS_TOUCH; },
+  get last() { return last; }, set last(v) { last = v; },
   get MODE() { return MODE; }, set MODE(v) { MODE = v; },
   get msgT() { return msgT; }, set msgT(v) { msgT = v; },
   get MYCHAR() { return MYCHAR; }, set MYCHAR(v) { MYCHAR = v; },
   get nameTag() { return nameTag; },
   get netSay() { return netSay; },
   get nRiders() { return nRiders; },
+  get paused() { return paused; }, set paused(v) { paused = v; },
   get pick() { return pick; },
   get player() { return player; }, set player(v) { player = v; },
   get pushOut() { return pushOut; },
+  get QUALITY() { return QUALITY; },
   get raceT() { return raceT; }, set raceT(v) { raceT = v; },
   get resetCart() { return resetCart; },
   get retarget() { return retarget; },
@@ -53,19 +60,21 @@ const G = {
   get shopHudSig() { return shopHudSig; }, set shopHudSig(v) { shopHudSig = v; },
   get SHOPON() { return SHOPON; },
   get showIntro() { return showIntro; },
+  get SOLO_SLOTS() { return SOLO_SLOTS; },
   get spec() { return spec; }, set spec(v) { spec = v; },
   get specCart() { return specCart; },
   get specList() { return specList; },
   get specSig() { return specSig; }, set specSig(v) { specSig = v; },
   get standSig() { return standSig; }, set standSig(v) { standSig = v; },
   get startCut() { return startCut; },
+  get startRaceMP() { return startRaceMP; },
   get state() { return state; }, set state(v) { state = v; },
   get stats() { return stats; },
   get TLIM() { return TLIM; }, set TLIM(v) { TLIM = v; },
   get traffic() { return traffic; },
   get world() { return world; }
 };
-__hud.bind(G); __results.bind(G); 
+__hud.bind(G); __inputglue.bind(G); __results.bind(G); 
 // G:end
 
 const $ = id => document.getElementById(id);
@@ -99,26 +108,12 @@ function removeShelfItems(x, z, n) { // hide products near impact
   return removed; }
 
 // ---------- input ----------
-const pressEdge = k => { if (k === 'Space') player.useN2O = true; if (k === 'KeyE' || k === 'ControlLeft' || k === 'ControlRight' || k === 'Item') player.useItem = true; };
-addEventListener('keydown', e => { if (e.code === 'KeyR' && MODE === 'solo' && !e.target.closest?.('input,select') && !isHelpOpen()) location.reload(); });
-$('restart').onclick = () => location.reload();
-function startGame() { initAudio(); if (GMODE === 'shop' && state === 'title' && MODE === 'solo' && LS.get('cartTutShop') !== '1') { maybeShopTutorial(startGame); return; } $('title').classList.add('hidden'); if ((state === 'title' || state === 'lobby') && MODE === 'solo') startRaceMP(SOLO_SLOTS(), 0, 'solo'); }
-$('startBtn').addEventListener('click', startGame);
-$('quality').value = QUALITY; $('quality').addEventListener('change', e => { LS.set('cartQuality', e.target.value); location.reload(); });
-$('quality').addEventListener('keydown', e => e.stopPropagation());
-addEventListener('keydown', e => { if (state === 'title' && !$('title').classList.contains('hidden') && (e.code === 'Enter' || e.code === 'Space')) startGame(); });
-const unlock = () => initAudio();
-['pointerdown', 'keydown', 'touchstart', 'touchend', 'click'].forEach(ev => addEventListener(ev, unlock, { passive: true }));
-document.addEventListener('visibilitychange', () => { if (document.hidden) suspendAudio(); else { initAudio(); last = performance.now(); } });
-const muteBtn = $('mute'); const showMute = m => muteBtn.textContent = m ? '🔇' : '🔊'; showMute(isMuted()); onMuteChange(showMute);
-muteBtn.addEventListener('pointerdown', e => { e.stopPropagation(); initAudio(); setMuted(!isMuted()); });
-addEventListener('keydown', e => { if (e.code === 'KeyM' && !e.repeat) setMuted(!isMuted()); });
+__inputglue.init0();
+
 const IS_TOUCH = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
-if (IS_TOUCH) document.body.classList.add('touch');
-initInput({ pressEdge, touch: IS_TOUCH });
+__inputglue.init1();
+
 // block page zoom/scroll gestures only on the game itself; menus/overlays keep native touch scrolling
-const SCROLLABLE = '#title,#mp,#charSel,#finish,.scrolly';
-['touchmove', 'gesturestart', 'dblclick'].forEach(ev => document.addEventListener(ev, e => { const t = e.target; if (t.closest?.('button') && ev !== 'touchmove') return; if (t.closest?.(SCROLLABLE)) return; e.preventDefault(); }, { passive: false }));
 
 // ---------- stats ----------
 const stats = { knocked: 0, spilled: 0 };
@@ -462,10 +457,8 @@ const fmt = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, '0')}`
 
 // ---------- auto-accel ----------
 let autoAccel = LS.get('cartAuto', IS_TOUCH ? '1' : '0') === '1';
-const autoBtn = $('auto'); const showAuto = () => autoBtn.textContent = autoAccel ? '자동가속 ON' : '자동가속 OFF'; showAuto();
-autoBtn.addEventListener('pointerdown', e => { e.stopPropagation(); autoAccel = !autoAccel; LS.set('cartAuto', autoAccel ? '1' : '0'); showAuto(); });
-addEventListener('keydown', e => { if (e.code === 'KeyT' && !e.repeat && !e.target.closest?.('input,select')) autoBtn.dispatchEvent(new PointerEvent('pointerdown')); });
-initHelp({ isTouch: () => IS_TOUCH, getAuto: () => autoAccel, setAuto: v => { autoAccel = v; LS.set('cartAuto', v ? '1' : '0'); showAuto(); }, pause: on => { paused = on && MODE === 'solo'; if (!on) last = performance.now(); }, flash: t => flash(t) });
+__inputglue.init2();
+
 let shake = 0;
 const pick = a => a[(Math.random() * a.length) | 0];
 // ---------- speech bubbles (HTML overlay projected to screen) ----------
