@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { flash, say } from './hud.js';
 import * as FX from './fx.js';
 import * as TR from './track.js';
+import { hAt } from './track.js';
 import { sound } from './audio.js';
 import { T_LIMIT } from './shop.js';
 import { shopRows, showResults, toLobby, leftRoom } from './results.js';
