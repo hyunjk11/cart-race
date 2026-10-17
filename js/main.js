@@ -17,6 +17,7 @@ import * as FX from './fx.js';
 import { createShop } from './shop.js';
 import { T_LIMIT } from './config/shop.js';
 import { charOf } from './chars.js';
+import { loadout, statMods, randomLoadout, cleanLoadout, addCoins, coins } from './parts.js';
 import { ROSTER } from './config/characters.js';
 import { openCharSel, tickCharPrev, setLineup } from './charsel.js';
 import { initAudio, sound, setEngine, setDrift } from './audio.js';
@@ -226,6 +227,14 @@ function setCartChar(c, id) {
   c.lines = d.lines;
 }
 S.MYCHAR = charOf(LS.get('cartChar') || 'mango').id;
+S.PSTATS = false; // multiplayer: parts stat tweaks (host setting; solo always on)
+/** Equip a parts loadout on a cart: model changes always; stat tweaks only when `stats`. */
+function setCartParts(c, lo, stats) {
+  c.lo = cleanLoadout(lo);
+  c.g.setParts(c.lo);
+  c.pm = stats ? statMods(c.lo) : null;
+}
+Object.assign(ctx, { setCartParts });
 const cline = (c, k, fb) => {
   const a = (c.lines && c.lines[k]) || fb;
   return a[(Math.random() * a.length) | 0];
@@ -251,6 +260,7 @@ S.player = addCart(0xff4f8b, '나', -2.5, 0, false, S.MYCHAR);
     [-2.5, 1],
     [2.5, 1],
   ].forEach(([l, r], k) => addCart(0x888888, others[k].name, l, r, true, others[k].id));
+  carts.forEach((c, i) => setCartParts(c, i ? randomLoadout() : loadout(), true));
 }
 
 // ---------- products (physics pool) ----------
@@ -826,6 +836,7 @@ function updateCart(c, dt) {
       c.lastDir = c.driftDir;
       if (c.driftT > 0.5) {
         c.combo++;
+        if (S.state === 'race') c.drifts = (c.drifts || 0) + 1;
         c.comboT = 3;
       }
     }
@@ -852,6 +863,7 @@ function updateCart(c, dt) {
   let maxV =
     c.maxV *
     (c.st ? c.st.spd : 1) *
+    (c.pm ? c.pm.spd : 1) *
     (c.ai && S.state === 'race' ? rubber(c) : 1) *
     (boosting ? CART.boostSpeed : 1) *
     (c.push && S.autoAccel ? CART.autoPushSpeed : 1) *
@@ -896,7 +908,7 @@ function updateCart(c, dt) {
   if (c.drifting) {
     c.h += (c.driftDir * 0.8 + steer * 0.6) * 2.5 * dt * sf;
     c.v -= c.v * 0.18 * dt;
-  } else c.h += steer * dt * CART.steerRate * sf * (c.st ? c.st.hdl : 1);
+  } else c.h += steer * dt * CART.steerRate * sf * (c.st ? c.st.hdl : 1) * (c.pm ? c.pm.hdl : 1);
   const grip = c.drifting ? 1.6 : c.slipT > 0 ? 0.9 : c.spin > 0 ? 0.5 : 9;
   let slip = ang(c.h - c.vd);
   c.vd += slip * Math.min(1, grip * dt);
@@ -908,7 +920,7 @@ function updateCart(c, dt) {
   c.slip = slip;
   if (c.drifting && Math.abs(slip) > 0.75 && c.riders && c.riders.length && c.driftT > 0.8) hopOut(c, 'drift');
   if (c.drifting && S.state === 'race') {
-    c.gauge += Math.abs(slip) * Math.abs(c.v) * dt * CART.driftCharge * (c.st ? c.st.drf : 1);
+    c.gauge += Math.abs(slip) * Math.abs(c.v) * dt * CART.driftCharge * (c.st ? c.st.drf : 1) * (c.pm ? c.pm.drf : 1);
     if (c.gauge >= 1) {
       c.gauge = 0;
       if (c.n2o < 2) {
@@ -1412,13 +1424,14 @@ function renderModes() {
       ? `모드: ${S.GMODE === 'shop' ? '🛒 장보기' + (S.TLIM ? ' (2분 제한)' : '') + ` · 봇 ${DIFFS[DIFF][0]}` : '🏁 레이스'} (호스트가 선택)`
       : '';
 }
-const optsNow = () => ({ gmode: S.GMODE, tlim: S.TLIM, diff: DIFF });
+const optsNow = () => ({ gmode: S.GMODE, tlim: S.TLIM, diff: DIFF, pst: !!S.PSTATS });
 Object.assign(ctx, { optsNow });
 function onOpts(o) {
   if (!o) return;
   S.GMODE = o.gmode === 'shop' ? 'shop' : 'race';
   S.TLIM = !!o.tlim;
   if (DIFFS[o.diff]) DIFF = o.diff;
+  S.PSTATS = !!o.pst;
   if (S.shop) S.shop.setActive(S.GMODE === 'shop');
   renderModes();
 }
@@ -1735,6 +1748,7 @@ function resetCart(c, i) {
     n2o: 0,
     gauge: 0,
     combo: 0,
+    drifts: 0,
     item: null,
     spin: 0,
     boostT: 0,
@@ -1798,6 +1812,7 @@ function startRaceMP(slots, you, mode) {
       c.prog = -1e9;
     }
     if (s && s.char) setCartChar(c, s.char);
+    if (s) setCartParts(c, s.parts || (s.type === 'bot' ? randomLoadout() : null), mode === 'solo' || S.PSTATS);
     nameTag(c, s && i !== you ? s.name : null);
   });
   endSpectate();
@@ -1892,7 +1907,9 @@ addEventListener('pointerdown', e => {
 const SOLO_SLOTS = () => {
   const others = ROSTER.filter(r => r.id !== S.MYCHAR).sort(() => Math.random() - 0.5);
   return carts.map((c, i) =>
-    i ? { type: 'bot', name: others[i - 1].name, char: others[i - 1].id } : { type: 'human', name: '나', char: S.MYCHAR },
+    i
+      ? { type: 'bot', name: others[i - 1].name, char: others[i - 1].id, parts: randomLoadout() }
+      : { type: 'human', name: '나', char: S.MYCHAR, parts: loadout() },
   );
 };
 Object.assign(ctx, { SOLO_SLOTS });
@@ -2111,6 +2128,18 @@ function render(dt) {
                   ? 'shock'
                   : 'normal',
     );
+    {
+      const b = (c.boostT > 0 || c.instT > 0) && !c.finished ? 1 : 0;
+      c.g.boostK += (b - c.g.boostK) * Math.min(1, dt * 8);
+      const tc = c.g.trail;
+      if (tc && (c.drifting || b) && Math.abs(c.v) > 6) {
+        c.trT = (c.trT || 0) - dt;
+        if (c.trT <= 0) {
+          c.trT = LOWFX ? 0.12 : 0.05;
+          puff(c.x - Math.sin(c.h) * 1.1, 0.3 + hAt(c.x, c.z), c.z - Math.cos(c.h) * 1.1, pick(tc), 1);
+        }
+      }
+    }
     c.g.update(c.v, dt);
     if (Math.abs(c.slip || 0) > 0.12 && Math.abs(c.v) > 5) {
       c.skT = (c.skT || 0) - dt;
@@ -2233,6 +2262,31 @@ Promise.race([document.fonts ? document.fonts.load('64px Jua') : Promise.resolve
 if (DEBUG)
   window.__game = {
     analog,
+    grantCoins: n => addCoins(n),
+    get coins() {
+      return coins();
+    },
+    setParts: (i, lo, st = true) => setCartParts(carts[i], lo, st),
+    /** model fingerprint of cart i: mesh count, bbox size, material types, parts loadout, stat mods */
+    cartInfo(i = 0) {
+      const c = carts[i],
+        r = c.g.root;
+      let meshes = 0,
+        verts = 0;
+      const mats = new Set();
+      r.updateMatrixWorld(true);
+      const box = new THREE.Box3();
+      r.traverse(o => {
+        if ((o.isMesh || o.isLineSegments) && o.visible && o.parent.visible && o !== c.tag) {
+          meshes++;
+          verts += o.geometry.attributes.position.count;
+          mats.add(o.material.type + (o.material.color ? ':' + o.material.color.getHexString() : ''));
+          box.expandByObject(o);
+        }
+      });
+      const sz = box.getSize(new THREE.Vector3());
+      return { meshes, verts, mats: [...mats].sort(), size: [sz.x, sz.y, sz.z].map(v => +v.toFixed(2)), lo: c.lo, pm: c.pm, char: c.char };
+    },
     itemOdds,
     get diff() {
       return DIFF;

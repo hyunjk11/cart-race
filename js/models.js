@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeRacer, makeDeco, charOf, vcToon as vcToonC, getFaceTex as racerFaceTex, facePatch, FACE as RFACE } from './chars.js';
 import { lm } from './util.js';
+import { wheelKit, addonMeshes, paintKit, flameMat, trailCols, MAT } from './cartparts.js';
 
 // Simple person; pivot at feet, faces +z
 // wire grid on a box: lines along each face
@@ -80,6 +81,11 @@ export function makeCart(color, charId, opt = {}) {
   hb.rotation.z = Math.PI / 2;
   hb.position.set(0, 1.4, -0.95);
   cart.add(hb);
+  const basicWheel = { geo: wg, mat: wm, y: 0.12 },
+    basketMat = basket.material;
+  let partsG = null,
+    flames = null,
+    paintCol = null;
   let person = null,
     deco = null,
     roll = 0,
@@ -111,7 +117,46 @@ export function makeCart(color, charId, opt = {}) {
       root.add(person.root);
       deco = makeDeco(id);
       if (deco) cart.add(deco);
-      colM.color.setHex(def.color);
+      colM.color.setHex(paintCol ?? def.color);
+    },
+    lo: null,
+    trail: null,
+    boostK: 0,
+    /** Apply a parts loadout (see config/parts.js): swaps wheel geometry, hides/replaces basket + handle, adds merged add-ons. */
+    setParts(lo) {
+      lo = lo || {};
+      api.lo = lo;
+      const low = !!opt.low;
+      const wk = wheelKit(lo.wheel, low) || basicWheel;
+      for (const w of wheels) {
+        w.clear();
+        w.geometry = wk.geo;
+        w.material = wk.mat;
+        w.position.y = wk.y;
+        if (wk.ring && !low) w.add(new THREE.Mesh(wk.ring.geo, wk.ring.mat));
+        else if (wk.ring) w.material = MAT.glow;
+      }
+      basket.visible = !lo.body || lo.body === 'wire' || lo.body === 'gold';
+      basket.material = lo.body === 'gold' ? MAT.goldLine : basketMat;
+      hb.visible = !lo.handle || lo.handle === 'basic';
+      if (partsG) {
+        cart.remove(partsG);
+        if (flames) flames.material.dispose();
+      }
+      partsG = new THREE.Group();
+      partsG.name = 'parts';
+      flames = null;
+      for (const m of addonMeshes(lo, low)) {
+        const mesh = new THREE.Mesh(m.geo, m.mat || flameMat());
+        if (!m.mat) flames = mesh;
+        partsG.add(mesh);
+      }
+      const pk = paintKit(lo.paint);
+      if (pk.decal) partsG.add(new THREE.Mesh(pk.decal.geo, pk.decal.mat));
+      cart.add(partsG);
+      paintCol = pk.col;
+      colM.color.setHex(paintCol ?? charOf(api.charId).color);
+      api.trail = trailCols(lo.trail);
     },
     face(n) {
       if (person) person.face(n);
@@ -120,6 +165,14 @@ export function makeCart(color, charId, opt = {}) {
       t += dt;
       roll += (v * dt) / 0.12;
       wheels.forEach(w => (w.rotation.x = roll));
+      if (flames) {
+        const k = api.boostK,
+          f = 0.35 + k * (0.75 + Math.sin(t * 40) * 0.25);
+        flames.visible = k > 0.02 || Math.abs(v) > 3;
+        flames.material.opacity = 0.35 + k * 0.6;
+        flames.scale.set(1, 1, 1);
+        flames.position.z = (1 - f) * 0.3;
+      }
       ph += Math.abs(v) * dt * 2.2;
       if (!person) return;
       if (api.pose === 'win') person.win(t);
