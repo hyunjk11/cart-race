@@ -3,7 +3,7 @@ usage: python3 tools/font.py /path/to/Jua-Regular.ttf   ->  fonts/jua.woff2"""
 import sys, glob, pathlib
 from fontTools import subset
 root = pathlib.Path(__file__).resolve().parent.parent
-text = ''.join(p.read_text(encoding='utf-8') for p in [root / 'index.html', root / 'style.css', *map(pathlib.Path, glob.glob(str(root / 'js' / '*.js')))])
+text = ''.join(p.read_text(encoding='utf-8') for p in [root / 'index.html', root / 'style.css', *map(pathlib.Path, glob.glob(str(root / 'js' / '**' / '*.js'), recursive=True))])
 chars = set(c for c in text if ord(c) > 0x7e) | set(chr(i) for i in range(0x20, 0x7f))
 ks = bytes(range(0)).decode()
 for hi in (range(0xB0, 0xC9) if "--full" in sys.argv else ()):
