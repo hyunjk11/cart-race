@@ -13,6 +13,19 @@ function onRemoteState(i, s) { const c = G.carts[i]; if (c && c.remote) c.rs = s
 function onRemoteItem(i) { const c = G.carts[i]; if (c && c.remote) c.useItem = true; }
 function onSpawn(a) { if (G.MODE === 'host' && G.products.length < G.MAXP + 20) G.spawnProduct(...a.slice(0, 6).map(Number)); }
 function slotToBot(i) { const c = G.carts[i]; if (!c) return; c.remote = false; c.ai = true; c.name += ' (봇)'; G.nameTag(c, c.name); NET.broadcast({ t: 'slots', names: G.carts.map(c => c.name) }); }
+// rejoin (E2): a dropped guest came back with its room token -> the replacement bot hands the cart back
+function slotToHuman(i, name) { const c = G.carts[i]; if (!c) return; c.ai = false; c.remote = true; c.rs = null; c.name = name; G.nameTag(c, name); NET.broadcast({ t: 'slots', names: G.carts.map(c => c.name) }); }
+const REJOIN_KEYS = ['x', 'z', 'h', 'vd', 'v', 'lap', 'idx', 'prog', 'finished', 'time', 'lapT0', 'laps', 'n2o', 'gauge', 'item'];
+function rejoinState(i) { const c = G.carts[i], me = {}; for (const k of REJOIN_KEYS) me[k] = c[k]; return { raceT: G.raceT, state: G.state, me }; }
+// guest side: jump straight into the running race (no countdown/intro); late joiners only watch
+function rejoinRace(r) {
+  if (r.state !== 'countdown') { G.state = 'race'; G.cd = 0; G.showIntro(false); G.$('countdown').textContent = ''; }
+  G.raceT = +r.raceT || 0;
+  if (r.spec) { G.startSpectate(); flash('👀 경주가 진행 중이에요 — 관전하다가 다음 경주부터 참가합니다'); G.msgT = 5; return; }
+  if (r.me) { Object.assign(G.player, r.me); G.player.rs = null; }
+  flash('📡 다시 연결되었습니다! 경주를 이어서 달려요'); G.msgT = 3;
+}
+function netNote(t) { flash(t); G.msgT = 3; }
 function onSlots(m) { (m.names || []).forEach((n, i) => { const c = G.carts[i]; if (c && c !== G.player && !c.inactive && c.name !== n) { c.name = n; G.nameTag(c, n); } }); }
 export function applyRemote(c, dt) {
   const s = c.rs; if (!s) return; const k = Math.min(1, dt * 15);
@@ -104,6 +117,6 @@ export function mpTick(dt) {
 }
 
 export function init() {
-  initNet({ getChar: () => G.MYCHAR, getOpts: () => G.optsNow(), onOpts: G.onOpts, getMap: () => TR.MAP_ID, onMap: id => { if (id !== TR.MAP_ID) G.loadMap(id); }, renderMaps: () => G.renderMaps(), onRemoteHazard: (i, id, sh) => { const c = G.carts[i]; if (c && c.remote) G.fun.remoteHazardHit(c, id, sh); }, startRace: G.startRaceMP, onRemoteState, onRemoteCrash, onRemoteItem, onSpawn, slotToBot, onSnap, onSay, onSlots, showResults, toLobby, leftRoom,
+  initNet({ getChar: () => G.MYCHAR, getOpts: () => G.optsNow(), onOpts: G.onOpts, getMap: () => TR.MAP_ID, onMap: id => { if (id !== TR.MAP_ID) G.loadMap(id); }, renderMaps: () => G.renderMaps(), onRemoteHazard: (i, id, sh) => { const c = G.carts[i]; if (c && c.remote) G.fun.remoteHazardHit(c, id, sh); }, startRace: G.startRaceMP, onRemoteState, onRemoteCrash, onRemoteItem, onSpawn, slotToBot, onSnap, onSay, onSlots, slotToHuman, rejoinState, rejoinRace, netNote, showResults, toLobby, leftRoom,
   onMenu: open => { if (G.state === 'title' || G.state === 'lobby') G.state = open ? 'lobby' : 'title'; } });
 }

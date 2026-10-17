@@ -61,11 +61,27 @@ function hostRecv(conn, m) {
   lastSeen.set(conn.peer, performance.now());
   const i = slotOf(conn.peer);
   if (m.t === 'hello') {
-    if (NET.inRace) { conn.send(JSON.stringify({ t: 'reject', msg: '이미 경주가 진행 중입니다. 잠시 후 다시 참가해 주세요.' })); setTimeout(() => conn.close(), 300); return; }
+    const tok = typeof m.tok === 'string' ? m.tok.slice(0, 40) : '';
+    // rejoin: same room token -> reclaim the old slot (from the replacement bot, or from a stale connection not yet timed out)
+    const own = tok ? NET.slots.findIndex((s, k) => s && k > 0 && s.tok === tok) : -1;
+    if (own > 0) {
+      const s = NET.slots[own], old = s.type === 'human' && s.id !== conn.peer ? NET.conns.get(s.id) : null;
+      const name = s.human || s.name, wasBot = s.type === 'bot';
+      NET.slots[own] = { type: 'human', name, ready: NET.inRace || !!(old && s.ready), id: conn.peer, char: s.char, tok, spec: s.spec };
+      if (old) { NET.conns.delete(s.id); lastSeen.delete(s.id); try { old.close(); } catch (e) {} }
+      if (NET.inRace) {
+        if (s.spec) sendSpectate(conn, own);
+        else { if (wasBot) api.slotToHuman(own, name); conn.send(JSON.stringify({ t: 'start', slots: NET.raceSlots, you: own, map: NET.map, opts: NET.opts, rejoin: api.rejoinState(own) })); }
+      }
+      chat(`${name} 님이 다시 연결되었습니다.`); pushLobby(); return;
+    }
     const free = NET.slots.findIndex(s => !s);
-    if (free < 0) { conn.send(JSON.stringify({ t: 'reject', msg: '방이 가득 찼습니다 (최대 4명).' })); setTimeout(() => conn.close(), 300); return; }
-    NET.slots[free] = { type: 'human', name: String(m.name || '게스트').slice(0, 10), ready: false, id: conn.peer, char: charOf(m.char).id };
-    chat(`${NET.slots[free].name} 님이 입장했습니다.`); pushLobby(); return;
+    if (free < 0) { conn.send(JSON.stringify({ t: 'reject', msg: NET.inRace ? '경주가 진행 중이고 자리가 가득 찼습니다. 경주가 끝난 뒤 다시 참가해 주세요.' : '방이 가득 찼습니다 (최대 4명).' })); setTimeout(() => conn.close(), 300); return; }
+    NET.slots[free] = { type: 'human', name: String(m.name || '게스트').slice(0, 10), ready: false, id: conn.peer, char: charOf(m.char).id, tok, spec: NET.inRace };
+    // late joiner mid-race: watch as a spectator, play from the next race (slot reserved in the lobby)
+    if (NET.inRace) { sendSpectate(conn, free); chat(`${NET.slots[free].name} 님이 관전 중입니다 (다음 경주부터 참가).`); }
+    else chat(`${NET.slots[free].name} 님이 입장했습니다.`);
+    pushLobby(); return;
   }
   if (i < 0) return;
   if (m.t === 'ready') { NET.slots[i].ready = !!m.v; pushLobby(); }
@@ -77,10 +93,11 @@ function hostRecv(conn, m) {
   else if (m.t === 'crash') api.onRemoteCrash(i, +m.k || 0);
   else if (m.t === 'hz') api.onRemoteHazard(i, m.id, !!m.sh);
 }
+function sendSpectate(conn, i) { conn.send(JSON.stringify({ t: 'start', slots: NET.raceSlots, you: i, map: NET.map, opts: NET.opts, rejoin: { raceT: api.rejoinState(0).raceT, spec: true } })); }
 function hostDrop(peerId) {
   const conn = NET.conns.get(peerId); NET.conns.delete(peerId); const i = slotOf(peerId); if (i < 0) return;
   const s = NET.slots[i];
-  if (NET.inRace) { NET.slots[i] = { type: 'bot', name: s.name + ' (봇)', ready: true, id: 'bot' + i, char: s.char }; api.slotToBot(i); chat(`${s.name} 님의 연결이 끊겨 봇으로 대체됩니다.`); }
+  if (NET.inRace && !s.spec) { NET.slots[i] = { type: 'bot', name: s.name + ' (봇)', ready: true, id: 'bot' + i, char: s.char, tok: s.tok, human: s.name }; api.slotToBot(i); chat(`${s.name} 님의 연결이 끊겨 봇으로 대체됩니다.`); }
   else { NET.slots[i] = null; chat(`${s.name} 님이 나갔습니다.`); }
   pushLobby();
 }
@@ -101,7 +118,8 @@ export function pushLobby() {
 function canStart() { const n = NET.slots.filter(Boolean).length; return n >= 2 && NET.slots.every(s => !s || s.ready); }
 function startRace() {
   if (!canStart()) return; NET.inRace = true;
-  const slots = NET.slots.map(s => s && { type: s.type, name: s.name, char: s.char });
+  NET.slots.forEach(s => { if (s) s.spec = false; });
+  const slots = NET.raceSlots = NET.slots.map(s => s && { type: s.type, name: s.name, char: s.char });
   for (const [pid, c] of NET.conns) if (c.open) c.send(JSON.stringify({ t: 'start', slots, you: slotOf(pid), map: NET.map, opts: NET.opts }));
   hideMP(); api.startRace(slots, 0, 'host');
 }
@@ -109,21 +127,34 @@ export function hostResults(rows) { NET.broadcast({ t: 'results', rows }); api.s
 function backToLobby() { NET.inRace = false; NET.slots.forEach(s => { if (s && s.type === 'human' && s.id !== 'host') s.ready = false; }); NET.broadcast({ t: 'tolobby' }); api.toLobby(); showLobby(); pushLobby(); }
 
 // ---------------- GUEST ----------------
-async function joinRoom(code) {
+function roomTok(code) { const k = 'cartTok_' + code; let t = LS.get(k); if (!t) { t = Array.from({ length: 16 }, () => 'abcdefghijkmnpqrstuvwxyz23456789'[(Math.random() * 32) | 0]).join(''); LS.set(k, t); } return t; }
+let retry = 0;
+// connection to the host lost mid-race: try to rejoin the same room (host gives the slot back by token) before giving up
+function lost(reason) {
+  if (NET.mode === 'guest' && NET.inRace && retry < 3) {
+    retry++; const p = peer; peer = null; NET.hostConn = null; NET.send = () => {}; hostSeen = 0;
+    try { p && p.destroy(); } catch (e) {}
+    api.netNote(`📡 연결이 끊겨 다시 연결하는 중… (${retry}/3)`);
+    setTimeout(() => joinRoom(NET.code, true).catch(() => leave(reason)), 1000); return;
+  }
+  leave(reason);
+}
+async function joinRoom(code, re = false) {
   code = (code || '').trim().toUpperCase(); if (!/^[A-Z0-9]{4,6}$/.test(code)) { msg('방 코드는 4~6자리 영문/숫자입니다.', true); return; }
-  const P = await loadPeer(); const name = nick(); msg('방에 연결하는 중…'); NET.code = code;
-  peer = new P(peerOpts());
+  if (!re) retry = 0;
+  const P = await loadPeer(); const name = nick(); if (!re) msg('방에 연결하는 중…'); NET.code = code;
+  const me = peer = new P(peerOpts());
   let opened = false;
-  const to = setTimeout(() => { if (!opened) msg(ERR.timeout, true); }, 15000);
+  const to = setTimeout(() => { if (opened || peer !== me) return; if (re) lost(ERR.timeout); else msg(ERR.timeout, true); }, 15000);
   peer.on('open', () => {
     const conn = peer.connect(PREFIX + code, { reliable: true }); NET.hostConn = conn;
-    conn.on('open', () => { opened = true; clearTimeout(to); NET.mode = 'guest'; NET.send = m => conn.open && conn.send(JSON.stringify(m)); NET.send({ t: 'hello', name, char: api.getChar() }); showLobby(); msg(''); });
-    conn.on('data', d => { hostSeen = performance.now(); guestRecv(typeof d === 'string' ? JSON.parse(d) : d); });
-    conn.on('close', () => { if (NET.mode === 'guest') leave('호스트가 방을 닫았거나 연결이 끊어졌습니다.'); });
+    conn.on('open', () => { opened = true; clearTimeout(to); NET.mode = 'guest'; NET.send = m => conn.open && conn.send(JSON.stringify(m)); NET.send({ t: 'hello', name, char: api.getChar(), tok: roomTok(code) }); if (!re) { showLobby(); msg(''); } });
+    conn.on('data', d => { if (peer !== me) return; hostSeen = performance.now(); guestRecv(typeof d === 'string' ? JSON.parse(d) : d); });
+    conn.on('close', () => { if (NET.mode === 'guest' && peer === me) lost('호스트가 방을 닫았거나 연결이 끊어졌습니다.'); });
     conn.on('error', () => msg(ERR.webrtc, true));
     watchIce(conn, () => { if (!opened) { clearTimeout(to); msg(ERR.webrtc, true); } });
   });
-  peer.on('error', e => { clearTimeout(to); msg(ERR[e.type] || ('연결 오류: ' + e.type), true); });
+  peer.on('error', e => { if (peer !== me) return; clearTimeout(to); if (re) { lost(ERR[e.type] || ERR.webrtc); return; } msg(ERR[e.type] || ('연결 오류: ' + e.type), true); });
 }
 // ICE 'failed' = no direct path and no working relay: show the network tips right away instead of waiting for the timeout
 function watchIce(conn, onFail) { const pc = conn.peerConnection; if (!pc) { setTimeout(() => conn.peerConnection && watchIce(conn, onFail), 200); return; } pc.addEventListener('iceconnectionstatechange', () => { if (pc.iceConnectionState === 'failed') onFail(); }); }
@@ -132,7 +163,7 @@ function guestRecv(m) {
   else if (m.t === 'chat') addChat(m.text);
   else if (m.t === 'reject') { leave(m.msg); }
   else if (m.t === 'kicked') { leave('호스트가 당신을 방에서 내보냈습니다.'); }
-  else if (m.t === 'start') { if (m.map) { NET.map = m.map; api.onMap(m.map); } if (m.opts) api.onOpts(m.opts); NET.you = m.you; NET.inRace = true; hideMP(); api.startRace(m.slots, m.you, 'guest'); }
+  else if (m.t === 'start') { if (m.map) { NET.map = m.map; api.onMap(m.map); } if (m.opts) api.onOpts(m.opts); NET.you = m.you; NET.inRace = true; hideMP(); retry = 0; api.startRace(m.slots, m.you, 'guest'); if (m.rejoin) api.rejoinRace(m.rejoin); }
   else if (m.t === 'ping') {}
   else if (m.t === 'snap') api.onSnap(m);
   else if (m.t === 'say') api.onSay(m);
@@ -177,7 +208,7 @@ setInterval(() => {
   const now = performance.now(), stalled = now - hbLast > 3000; hbLast = now;
   if (stalled) { for (const k of lastSeen.keys()) lastSeen.set(k, now); if (hostSeen) hostSeen = now; } // our own tab was frozen (busy main thread / backgrounded): don't blame the peers
   if (NET.mode === 'host') { NET.broadcast({ t: 'ping' }); for (const [pid] of NET.conns) if (now - (lastSeen.get(pid) || now) > 6000) { const c = NET.conns.get(pid); try { c.close(); } catch (e) {} hostDrop(pid); } }
-  if (NET.mode === 'guest') { NET.send({ t: 'ping' }); if (hostSeen && now - hostSeen > 9000) leave(ERR['host-lost']); }
+  if (NET.mode === 'guest') { NET.send({ t: 'ping' }); if (hostSeen && now - hostSeen > 9000) lost(ERR['host-lost']); }
 }, 1500);
 export function initNet(gameApi) {
   api = gameApi;
