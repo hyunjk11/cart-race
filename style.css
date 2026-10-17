@@ -96,7 +96,7 @@ body.touch #auto{display:none}
 .mppanel input{font-size:17px;padding:8px 10px;border-radius:8px;border:0;width:100%;box-sizing:border-box;user-select:text;-webkit-user-select:text}
 .mppanel label{display:block;margin-bottom:8px}.mppanel button{margin:6px 4px 0 0;font-size:17px;padding:8px 16px}
 .joinrow{display:flex;gap:8px;align-items:center}.joinrow input{flex:1}.joinrow button{margin:0;white-space:nowrap}
-#mpMsg,#lobbyMsg{min-height:22px;margin-top:8px;color:#9f9}#mpMsg.err,#lobbyMsg.err{color:#ff8a80}
+#mpMsg,#lobbyMsg{min-height:22px;white-space:pre-line;margin-top:8px;color:#9f9}#mpMsg.err,#lobbyMsg.err{color:#ff8a80}
 .note{font-size:13px;opacity:.75;margin-top:6px}button.sec{background:#555}button:disabled{background:#666;opacity:.6;cursor:not-allowed}
 #roomCode{color:#ffd84d;letter-spacing:3px}
 #slots .slot{display:flex;align-items:center;gap:8px;border:2px solid;border-radius:10px;padding:6px 10px;margin:8px 0;background:#0003;font-size:16px}

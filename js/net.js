@@ -1,6 +1,7 @@
 // Online multiplayer: host-authoritative P2P over WebRTC using PeerJS (public PeerJS cloud broker).
 import { ROSTER, charOf } from './chars.js';
 import { LS } from './store.js';
+import { iceServers } from './netconfig.js';
 const $ = id => document.getElementById(id);
 const PREFIX = 'cartrace-';
 const COLORS = ['#ff4f8b', '#43d17a', '#ffc107', '#9c5cff'];
@@ -9,14 +10,17 @@ const qs = new URLSearchParams(location.search);
 let Peer = null, peer = null, api = null;
 export const NET = { mode: 'solo', you: 0, slots: [], conns: new Map(), hostConn: null, code: '', inRace: false, map: 'mart', opts: { gmode: 'race', tlim: true, diff: 'normal' }, send() {}, broadcast() {} };
 
+const TIP = '\n💡 다른 네트워크로 시도해 보세요: 와이파이 ↔ 모바일 데이터(LTE/5G) 전환, 회사·학교 와이파이 대신 집 와이파이나 핫스팟. 두 사람이 같은 와이파이에 있으면 가장 잘 연결돼요.';
 const ERR = {
-  'peer-unavailable': '방을 찾을 수 없습니다. 코드를 확인해 주세요.',
+  'peer-unavailable': '방을 찾을 수 없습니다. 코드를 확인하거나, 호스트가 방을 아직 열어 두었는지 확인해 주세요.',
   'unavailable-id': '이미 사용 중인 방 코드입니다. 다시 시도합니다…',
-  'network': '시그널링 서버에 연결할 수 없습니다. 네트워크를 확인해 주세요.',
+  'network': '시그널링 서버에 연결할 수 없습니다. 인터넷 연결을 확인해 주세요.' + TIP,
   'server-error': '시그널링 서버 오류입니다. 잠시 후 다시 시도해 주세요.',
-  'socket-error': '서버 연결이 끊어졌습니다.', 'socket-closed': '서버 연결이 끊어졌습니다.',
-  'browser-incompatible': '이 브라우저는 WebRTC를 지원하지 않습니다.',
-  'webrtc': 'WebRTC 연결에 실패했습니다 (방화벽/회사망에서 차단될 수 있어요).',
+  'socket-error': '서버 연결이 끊어졌습니다. 잠시 후 다시 시도해 주세요.', 'socket-closed': '서버 연결이 끊어졌습니다. 잠시 후 다시 시도해 주세요.',
+  'browser-incompatible': '이 브라우저는 WebRTC를 지원하지 않습니다. 최신 Chrome·Safari·Firefox·삼성 인터넷을 사용해 주세요.',
+  'webrtc': '상대와 직접 연결(WebRTC)하지 못했습니다. 방화벽이나 통신사/회사망이 P2P 연결을 막고 있을 수 있어요.' + TIP,
+  'timeout': '연결 시간이 초과되었습니다. 방 코드를 확인하고, 네트워크가 P2P 연결을 막고 있지 않은지 확인해 주세요.' + TIP,
+  'host-lost': '호스트와의 연결이 끊어졌습니다.' + TIP,
 };
 function msg(t, err) { const el = $('mpMsg'); el.textContent = t || ''; el.className = err ? 'err' : ''; const l = $('lobbyMsg'); if (l) { l.textContent = t || ''; l.className = err ? 'err' : ''; } }
 function nick() { let n = ($('nick').value || '').trim().slice(0, 10); if (!n) n = '플레이어' + ((Math.random() * 900 + 100) | 0); $('nick').value = n; LS.set('cartNick', n); return n; }
@@ -27,7 +31,7 @@ async function loadPeer() {
   return Peer;
 }
 function peerOpts() {
-  const o = { debug: 0, config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:global.stun.twilio.com:3478' }] } };
+  const o = { debug: 0, config: { iceServers: iceServers() } };
   const ph = qs.get('peerhost'); if (ph) { const [host, port] = ph.split(':'); Object.assign(o, { host, port: +(port || 9000), path: qs.get('peerpath') || '/', secure: location.protocol === 'https:' && host !== 'localhost' }); }
   return o;
 }
@@ -110,16 +114,19 @@ async function joinRoom(code) {
   const P = await loadPeer(); const name = nick(); msg('방에 연결하는 중…'); NET.code = code;
   peer = new P(peerOpts());
   let opened = false;
-  const to = setTimeout(() => { if (!opened) msg('연결 시간이 초과되었습니다. 코드 확인 또는 WebRTC 차단 여부를 확인하세요.', true); }, 15000);
+  const to = setTimeout(() => { if (!opened) msg(ERR.timeout, true); }, 15000);
   peer.on('open', () => {
     const conn = peer.connect(PREFIX + code, { reliable: true }); NET.hostConn = conn;
     conn.on('open', () => { opened = true; clearTimeout(to); NET.mode = 'guest'; NET.send = m => conn.open && conn.send(JSON.stringify(m)); NET.send({ t: 'hello', name, char: api.getChar() }); showLobby(); msg(''); });
     conn.on('data', d => { hostSeen = performance.now(); guestRecv(typeof d === 'string' ? JSON.parse(d) : d); });
     conn.on('close', () => { if (NET.mode === 'guest') leave('호스트가 방을 닫았거나 연결이 끊어졌습니다.'); });
     conn.on('error', () => msg(ERR.webrtc, true));
+    watchIce(conn, () => { if (!opened) { clearTimeout(to); msg(ERR.webrtc, true); } });
   });
   peer.on('error', e => { clearTimeout(to); msg(ERR[e.type] || ('연결 오류: ' + e.type), true); });
 }
+// ICE 'failed' = no direct path and no working relay: show the network tips right away instead of waiting for the timeout
+function watchIce(conn, onFail) { const pc = conn.peerConnection; if (!pc) { setTimeout(() => conn.peerConnection && watchIce(conn, onFail), 200); return; } pc.addEventListener('iceconnectionstatechange', () => { if (pc.iceConnectionState === 'failed') onFail(); }); }
 function guestRecv(m) {
   if (m.t === 'lobby') { NET.slots = m.slots; NET.you = m.you; if (m.map) { NET.map = m.map; api.onMap(m.map); } if (m.opts) { NET.opts = m.opts; api.onOpts(m.opts); } renderLobby(); }
   else if (m.t === 'chat') addChat(m.text);
@@ -170,7 +177,7 @@ setInterval(() => {
   const now = performance.now(), stalled = now - hbLast > 3000; hbLast = now;
   if (stalled) { for (const k of lastSeen.keys()) lastSeen.set(k, now); if (hostSeen) hostSeen = now; } // our own tab was frozen (busy main thread / backgrounded): don't blame the peers
   if (NET.mode === 'host') { NET.broadcast({ t: 'ping' }); for (const [pid] of NET.conns) if (now - (lastSeen.get(pid) || now) > 6000) { const c = NET.conns.get(pid); try { c.close(); } catch (e) {} hostDrop(pid); } }
-  if (NET.mode === 'guest') { NET.send({ t: 'ping' }); if (hostSeen && now - hostSeen > 9000) leave('호스트와의 연결이 끊어졌습니다.'); }
+  if (NET.mode === 'guest') { NET.send({ t: 'ping' }); if (hostSeen && now - hostSeen > 9000) leave(ERR['host-lost']); }
 }, 1500);
 export function initNet(gameApi) {
   api = gameApi;
