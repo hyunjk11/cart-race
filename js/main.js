@@ -1,3 +1,9 @@
+/**
+ * main.js — entry point and game loop: renderer/scene/physics setup, carts (player + bots), customers and spilled
+ * products, race state machine (title → countdown → race → finished), driving model (updateCart), PA announcer,
+ * map loading, intro sweep, finish cutscene, spectator mode, render loop. Shares state with the split-out modules
+ * (hud, results, inputglue, netglue) through state.js. ?debug=1 exposes window.__game for tests.
+ */
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import * as TR from './track.js';

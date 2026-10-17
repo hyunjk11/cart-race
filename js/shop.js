@@ -1,5 +1,7 @@
-// 장보기 모드: shopping lists, glowing pickup spots, basket contents, sales, receipt scoring.
-// Host/solo is authoritative; guests mirror state from snapshots (snap/applySnap). Effects are diff-driven so they play everywhere.
+/**
+ * shop.js — 장보기 모드: shopping lists, glowing pickup spots, basket contents, sales, receipt scoring.
+ * Host/solo is authoritative; guests mirror state from snapshots (snap/applySnap). Effects are diff-driven so they play everywhere.
+ */
 import * as THREE from 'three';
 import { GOODS, MAP_GOODS, LIST_N, KEY_R, GRAB_R, GRAB_V, PTS, T_LIMIT } from './config/shop.js';
 

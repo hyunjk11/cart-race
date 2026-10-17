@@ -1,4 +1,6 @@
-// Safe persistent storage (private-mode / disabled-storage browsers throw on access) + debug flag
+/**
+ * store.js — Safe persistent storage (private-mode / disabled-storage browsers throw on access) + debug flag
+ */
 const mem = new Map();
 export const LS = {
   get(k, d = null) {

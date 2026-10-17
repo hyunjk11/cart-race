@@ -1,10 +1,13 @@
+/**
+ * track.js — map system: builds floor, walls (AABB strips), zones, elevation, signs and obstacles from config/maps.js;
+ * path helpers (atLane, tangentAt, zoneAt, hAt) and the live current map (MAP, HW, path, strips).
+ */
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clamp01 } from './util.js';
 import { MAPS } from './config/maps.js';
 import { SD, SH } from './config/tuning.js';
-// Map system: builds floor, walls (AABB strips), zones, elevation and obstacles from config/maps.js; path helpers.
 export let HW = 6,
   MAP = null,
   MAP_ID = 'mart';

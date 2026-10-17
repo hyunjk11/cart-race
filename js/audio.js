@@ -1,5 +1,7 @@
+/**
+ * audio.js — synthesized Web Audio sounds (no audio files): one-shot effects (sound.*), engine and drift loops, mute.
+ */
 import { LS } from './store.js';
-// Synthesized sounds via Web Audio API (no external files)
 let ctx = null,
   master,
   sfx,

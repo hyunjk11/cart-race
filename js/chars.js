@@ -1,5 +1,7 @@
-// Racer roster: chibi characters (big head ~1:1.2 body), toon-shaded vertex-colored merged parts, inverted-hull outlines,
-// shared glossy-eye face atlas (blink + expressions), per-character push/idle/win animations, cart decorations & voice lines.
+/**
+ * chars.js — Racer roster: chibi characters (big head ~1:1.2 body), toon-shaded vertex-colored merged parts, inverted-hull outlines,
+ * shared glossy-eye face atlas (blink + expressions), per-character push/idle/win animations, cart decorations & voice lines.
+ */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ROSTER } from './config/characters.js';

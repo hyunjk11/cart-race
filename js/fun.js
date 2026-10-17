@@ -1,4 +1,6 @@
-// Drift visuals, item boxes & items, displays (props), and random mart events.
+/**
+ * fun.js — Drift visuals, item boxes & items, displays (props), and random mart events.
+ */
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import * as TR from './track.js';

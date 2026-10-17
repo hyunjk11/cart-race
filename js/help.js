@@ -1,4 +1,6 @@
-// '?' help & settings panel, first-race tips, 3-step shopping tutorial, reduced-motion preference
+/**
+ * help.js — '?' help & settings panel, first-race tips, 3-step shopping tutorial, reduced-motion preference
+ */
 import { LS } from './store.js';
 import { ACTIONS, getBinds, setBind, resetBinds, keyName, actionKeys, captureNextKey, steerMode, applySteerMode } from './input.js';
 import { $ } from './util.js';

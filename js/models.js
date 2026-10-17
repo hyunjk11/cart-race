@@ -1,3 +1,6 @@
+/**
+ * models.js — low-poly meshes: shopping cart (with character rider + decoration), customers (chibi shoppers), LOD proxies.
+ */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeRacer, makeDeco, charOf, vcToon as vcToonC, getFaceTex as racerFaceTex, facePatch, FACE as RFACE } from './chars.js';

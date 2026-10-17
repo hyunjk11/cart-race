@@ -1,4 +1,6 @@
-// Presentation layer: comic hit text, screen flash, speed lines, confetti, PA banners, checkout area with cashiers, results podium.
+/**
+ * fx.js — Presentation layer: comic hit text, screen flash, speed lines, confetti, PA banners, checkout area with cashiers, results podium.
+ */
 import * as THREE from 'three';
 import { makeChibi, makeCustomer } from './models.js';
 import { makeRacer } from './chars.js';

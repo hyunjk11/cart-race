@@ -1,4 +1,6 @@
-// Keyboard (with remapping) + touch controls (slide-to-steer D-pad or floating joystick)
+/**
+ * input.js — Keyboard (with remapping) + touch controls (slide-to-steer D-pad or floating joystick)
+ */
 import { LS } from './store.js';
 export const keys = {};
 export const analog = { steer: 0, active: false }; // joystick steering, -1 (right) .. 1 (left) like the key steer sign
