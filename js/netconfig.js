@@ -10,5 +10,8 @@ export const STUN = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:glo
 export const TURN = [];
 // testing hook: ?turn=<url>,<user>,<cred> (e.g. a self-hosted coturn) adds one TURN server for this session
 const q = new URLSearchParams(location.search).get('turn');
-if (q) { const [urls, username, credential] = q.split(','); if (urls) TURN.push({ urls, username, credential }); }
+if (q) {
+  const [urls, username, credential] = q.split(',');
+  if (urls) TURN.push({ urls, username, credential });
+}
 export const iceServers = () => [...STUN, ...TURN];
