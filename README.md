@@ -6,6 +6,7 @@ A browser 3D shopping-cart racing game (three.js + cannon-es), Korean UI. **Play
 - **4 maps:** 일반 매장 · 냉동 코너 · 지하 주차장 · 2층 무빙워크
 - **8 characters** with small stat differences, voice lines and cart decorations
 - **Items, drift → N2O, customers that hop into your cart**, PA announcer, podium cutscene
+- **🪙 Coins + 🔧 차고 (parts shop):** earn coins every run (place, chaos, drift combos, shopping list, first win of the day), buy wheels/baskets/handles/boosters/toppers/paint/trails that visibly change the cart; small stat tweaks (±5% max) in solo, cosmetic-only online unless the host turns them on
 - **Online multiplayer** for up to 4 players (WebRTC via PeerJS, host-authoritative; bots fill empty slots)
 - Desktop keyboard and mobile touch controls; installable PWA that works offline (solo)
 
@@ -15,7 +16,7 @@ No build step. Serve the folder statically:
 python3 -m http.server 8080      # then open http://localhost:8080/
 ```
 Useful query params: `?map=mart|freezer|parking|skywalk`, `?mode=shop`, `?notime`, `?nointro`, `?room=CODE`.
-`?debug=1` exposes test hooks (`window.__game`, `?scoop=`); they are hidden in normal play.
+`?debug=1` exposes test hooks (`window.__game` incl. `grantCoins(n)`, `cartInfo(i)`, `setParts(i, lo)`, `?scoop=`); they are hidden in normal play.
 
 ## Architecture
 Plain ES modules, no build step. `index.html` loads `js/main.js` through an import map that `tools/stamp.py` versions.
@@ -44,6 +45,7 @@ Plain ES modules, no build step. `index.html` loads `js/main.js` through an impo
 | `js/netglue.js` | multiplayer glue: host snapshots, guest prediction/mirroring, remote carts, MP race end |
 | `js/track.js` | builds a map (floor, walls, zones, elevation, signs, obstacles); path helpers; current `MAP` |
 | `js/models.js` `js/chars.js` `js/charsel.js` | cart/customer meshes; toon characters + decorations; character select |
+| `js/parts.js` `js/cartparts.js` `js/garage.js` | coins/owned/equipped parts in localStorage + stat mods + coin awards; cached part geometry/materials (low-quality variants); 🔧 차고 UI with 3D preview |
 | `js/fun.js` `js/shop.js` `js/fx.js` `js/audio.js` | items/hazards/events, shopping mode, effects/podium, synthesized audio |
 | `js/net.js` `js/netconfig.js` | PeerJS multiplayer (rooms, lobby, rejoin, host migration); STUN/TURN servers |
 | `js/input.js` `js/help.js` | keyboard remapping + touch controls; help/settings panel, tips, tutorial |
@@ -51,6 +53,7 @@ Plain ES modules, no build step. `index.html` loads `js/main.js` through an impo
 | `js/config/tuning.js` | laps, cart driving model (`CART`), bot difficulty (`DIFFS`), pools, wall size, intro length |
 | `js/config/maps.js` | the 4 maps: layout, theme, zones, signs, displays, obstacles |
 | `js/config/characters.js` | the 8 characters: stats, palettes, animation style, voice lines |
+| `js/config/parts.js` | part slots, parts (price, stat tweaks), coin reward rules |
 | `js/config/items.js` `js/config/shop.js` | item table + odds by position; shopping goods, prices, scoring, radii |
 | `vendor/` | tree-shaken minified three.js r160 + cannon-es 0.20 bundles (`python3 tools/bundle.py`, rerun after using a new THREE./CANNON. export), PeerJS 1.5.4 (no CDN at runtime) |
 | `fonts/jua.woff2` | Jua font subset to the characters the game uses |
