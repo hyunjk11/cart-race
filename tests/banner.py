@@ -17,11 +17,11 @@ async def main():
                 n = 1 if typ=="single" else 5
                 for k in range(n): await ev(f"__game.pa('현재 1위는 노랑 카트 고객님입니다! #{k}')")
                 await ev("__game.announce('테스트 이벤트'); __game.flash('테스트 메시지')")
-                t0=time.time(); seen=False; runs=[]; cur=None
+                t0=time.time(); seen=False; runs=[]; cur=None; curtxt=None
                 while time.time()-t0 < (6 if typ=='single' else 15):
-                    v=await ev(VIS)
-                    if v and cur is None: cur=time.time()
-                    if not v and cur is not None: runs.append(round(time.time()-cur,1)); cur=None
+                    v,txt=await ev(f"[{VIS},document.getElementById('pa').textContent]")
+                    if cur is not None and (not v or txt!=curtxt): runs.append(round(time.time()-cur,1)); cur=None  # a queued banner replacing the text = new run (slow CI may show no hidden gap in 0.2s sampling)
+                    if v and cur is None: cur=time.time(); curtxt=txt
                     seen = seen or v
                     await asyncio.sleep(0.2)
                 ev_vis=await ev("document.getElementById('event').classList.contains('show')"); msg=await ev("document.getElementById('msg').textContent")=='테스트 메시지'  # only our flash must have expired (others may legitimately appear)
