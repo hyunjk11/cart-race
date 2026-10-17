@@ -65,7 +65,7 @@ function rejoinRace(r) {
   S.raceT = +r.raceT || 0;
   if (r.spec) {
     ctx.startSpectate();
-    flash('👀 경주가 진행 중이에요 — 관전하다가 다음 경주부터 참가합니다');
+    flash('👀 레이스가 진행 중이에요 — 관전하다가 다음 레이스부터 참가합니다');
     S.msgT = 5;
     return;
   }
@@ -73,7 +73,7 @@ function rejoinRace(r) {
     Object.assign(S.player, r.me);
     S.player.rs = null;
   }
-  flash('📡 다시 연결되었습니다! 경주를 이어서 달려요');
+  flash('📡 다시 연결되었습니다! 레이스를 이어서 달려요');
   S.msgT = 3;
 }
 function netNote(t) {

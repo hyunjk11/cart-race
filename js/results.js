@@ -78,7 +78,7 @@ function podiumFromRows(rows) {
 function showResults(rows) {
   ctx.endSpectate();
   S.state = 'finished';
-  $('finTitle').textContent = rows[0] && rows[0].rc ? '🧾 장보기 결과' : '🏁 경주 결과';
+  $('finTitle').textContent = rows[0] && rows[0].rc ? '🧾 장보기 결과' : '🏁 레이스 결과';
   if (rows[0] && rows[0].rc) $('finBody').innerHTML = receiptHTML(rows, ctx.carts.indexOf(S.player)) + '<i>잠시 후 로비로 돌아갑니다…</i>';
   else
     $('finBody').innerHTML =

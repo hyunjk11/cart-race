@@ -1344,7 +1344,7 @@ function renderModes() {
     el.innerHTML =
       [
         ['race', '🏁', '레이스', '3바퀴 먼저 완주'],
-        ['shop', '🛒', '장보기 모드', '목록 담고 계산대로'],
+        ['shop', '🛒', '장보기', '목록 담고 계산대로'],
       ]
         .map(
           ([id, ic, n, d]) =>
@@ -1558,7 +1558,7 @@ function updateMapFx(dt) {
     if (dp < 16 && honkCd <= 0 && S.state === 'race') {
       honkCd = 4;
       sound.honk();
-      say(C.ent, pick(['빵빵! 비켜요~', '카트는 인도로!', '주차장에서 경주라니!']), 1.6);
+      say(C.ent, pick(['빵빵! 비켜요~', '카트는 인도로!', '주차장에서 레이스라니!']), 1.6);
     }
     if (S.MODE !== 'guest')
       for (const cu of customers)

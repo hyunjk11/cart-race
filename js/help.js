@@ -167,7 +167,15 @@ const TABS = {
       const b = getBinds(),
         mp = motionPref(),
         sm = steerMode();
-      return `<div class="srow"><span>터치 조향</span><span class="seg"><button data-steer="dpad" class="${sm === 'dpad' ? 'on' : ''}">D-패드 (밀어서 조향)</button><button data-steer="stick" class="${sm === 'stick' ? 'on' : ''}">조이스틱</button></span></div>
+      const q = $('quality')?.value || 'auto';
+      return `<div class="srow"><span>화질 <small class="note">(바꾸면 새로고침)</small></span><span class="seg">${[
+        ['auto', '자동'],
+        ['low', '낮음'],
+        ['high', '높음'],
+      ]
+        .map(([v, n]) => `<button data-q="${v}" class="${q === v ? 'on' : ''}">${n}</button>`)
+        .join('')}</span></div>
+    <div class="srow"><span>터치 조향</span><span class="seg"><button data-steer="dpad" class="${sm === 'dpad' ? 'on' : ''}">D-패드 (밀어서 조향)</button><button data-steer="stick" class="${sm === 'stick' ? 'on' : ''}">조이스틱</button></span></div>
     <div class="srow"><span>자동 가속</span><span class="seg"><button data-auto="1" class="${api.getAuto() ? 'on' : ''}">켜기</button><button data-auto="0" class="${api.getAuto() ? '' : 'on'}">끄기</button></span></div>
     <div class="srow"><span>화면 흔들림·번쩍임</span><span class="seg"><button data-motion="auto" class="${mp === 'auto' ? 'on' : ''}">시스템 설정</button><button data-motion="reduce" class="${mp === 'reduce' ? 'on' : ''}">줄이기</button><button data-motion="full" class="${mp === 'full' ? 'on' : ''}">모두 켜기</button></span></div>
     <h4>⌨️ 키 설정 <small>(버튼을 누르고 새 키 입력 · R/M/T/Enter/Esc 제외)</small></h4>
@@ -189,6 +197,14 @@ function onClick(e) {
   if (t.dataset.tab) {
     tab = t.dataset.tab;
     render();
+    return;
+  }
+  if (t.dataset.q) {
+    const q = $('quality');
+    if (q && q.value !== t.dataset.q) {
+      q.value = t.dataset.q;
+      q.dispatchEvent(new Event('change'));
+    }
     return;
   }
   if (t.dataset.steer) {
@@ -227,7 +243,7 @@ function onClick(e) {
     seen = new Set();
     saveSeen();
     LS.set('cartTutShop', '0');
-    t.textContent = '✔ 다음 경주에서 다시 보여요';
+    t.textContent = '✔ 다음 레이스에서 다시 보여요';
     return;
   }
   if (t.id === 'hShopTut') {
@@ -276,6 +292,8 @@ export function initHelp(a) {
     open ? closeHelp() : openHelp();
   });
   $('helpBtn').addEventListener('pointerdown', e => e.stopPropagation());
+  $('tHelp')?.addEventListener('click', () => openHelp('controls'));
+  $('tSet')?.addEventListener('click', () => openHelp('settings'));
   $('helpClose').onclick = closeHelp;
   $('helpOk').onclick = closeHelp;
   $('help2').addEventListener('click', e => {

@@ -182,7 +182,7 @@ function hostRecv(conn, m) {
         JSON.stringify({
           t: 'reject',
           msg: NET.inRace
-            ? '경주가 진행 중이고 자리가 가득 찼습니다. 경주가 끝난 뒤 다시 참가해 주세요.'
+            ? '레이스가 진행 중이고 자리가 가득 찼습니다. 레이스가 끝난 뒤 다시 참가해 주세요.'
             : '방이 가득 찼습니다 (최대 4명).',
         }),
       );
@@ -201,7 +201,7 @@ function hostRecv(conn, m) {
     // late joiner mid-race: watch as a spectator, play from the next race (slot reserved in the lobby)
     if (NET.inRace) {
       sendSpectate(conn, free);
-      chat(`${NET.slots[free].name} 님이 관전 중입니다 (다음 경주부터 참가).`);
+      chat(`${NET.slots[free].name} 님이 관전 중입니다 (다음 레이스부터 참가).`);
     } else chat(`${NET.slots[free].name} 님이 입장했습니다.`);
     pushLobby();
     return;
@@ -382,7 +382,7 @@ function migrate(reason) {
   mig = { n: 0, code: NET.code, you: NET.you, cand: humans[0] === NET.you, slots: NET.slots, opts: NET.opts };
   showLobby();
   msg(
-    (wasRace ? '호스트가 나가서 경주가 중단되었습니다. ' : '호스트가 나갔습니다. ') +
+    (wasRace ? '호스트가 나가서 레이스가 중단되었습니다. ' : '호스트가 나갔습니다. ') +
       (mig.cand ? '내가 새 호스트가 되어 방을 다시 여는 중…' : '새 호스트에게 다시 연결하는 중…'),
   );
   setTimeout(migStep, mig.cand ? 1500 : 3500);
@@ -497,7 +497,7 @@ function guestRecv(m) {
       NET.inRace = false;
       api.toLobby();
       showLobby();
-      msg('호스트가 바뀌어 경주가 중단되었습니다. 다음 경주를 준비해 주세요.');
+      msg('호스트가 바뀌어 레이스가 중단되었습니다. 다음 레이스를 준비해 주세요.');
     }
     renderLobby();
   } else if (m.t === 'chat') addChat(m.text);
@@ -595,13 +595,13 @@ function renderLobby() {
   $('addBot').disabled = !NET.slots.some(s => !s);
   $('startRace').disabled = !canStart();
   const me = NET.slots[NET.you];
-  $('readyBtn').textContent = me && me.ready ? '준비 취소' : '준비';
+  $('readyBtn').textContent = me && me.ready ? '✋ 준비 취소' : '✋ 준비';
   api.renderMaps();
   $('lobbyHint').textContent = host
     ? canStart()
-      ? '모두 준비되었습니다! 경주를 시작하세요.'
+      ? '모두 준비되었습니다! 레이스를 시작하세요.'
       : '참가자 2명 이상(봇 포함) + 모두 준비 시 시작할 수 있어요.'
-    : '호스트가 경주를 시작할 때까지 기다려 주세요.';
+    : '호스트가 레이스를 시작할 때까지 기다려 주세요.';
 }
 
 // heartbeat: detect silent disconnects (closed tabs / lost networks)

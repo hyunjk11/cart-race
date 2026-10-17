@@ -84,6 +84,15 @@ function updateBubbles() {
 }
 export function init0() {
   MAXB = 4;
+  // phones: tap a HUD box to show/hide the low-value stats (best lap, knocked customers, spilled products)
+  for (const id of ['hudL', 'hudR']) {
+    const el = $(id);
+    el.addEventListener('pointerdown', e => e.stopPropagation());
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      document.body.classList.toggle('hudmore');
+    });
+  }
   _v = new THREE.Vector3();
   setInterval(() => {
     if (S.state !== 'race') return;

@@ -326,3 +326,96 @@ body.reduce-motion *{animation-duration:.01ms!important;animation-iteration-coun
 }
 @media (max-width:700px) and (min-height:501px){#standings{top:116px;left:124px;transform:none;flex-direction:column;align-items:flex-start}}
 @media (max-height:500px){#standings{top:44px}#tip{top:calc(env(safe-area-inset-top,0px) + 70px)}}
+/* ===== G2: unified design system (tokens · buttons · chips · cards · panels) — overrides the older patches above ===== */
+:root{
+ --c-pri:#ff4f8b;--c-pri-2:#ff7eb3;--c-pri-d:#a3134a;--c-alt:#0288d1;--c-alt-2:#4fc3f7;--c-alt-d:#01579b;
+ --c-acc:#ffd84d;--c-ok:#8ef59b;--c-err:#ff8a80;--c-danger:#e5484d;
+ --c-bg:#2b1f45;--c-panel:linear-gradient(160deg,#30224d,#3f1f52);--c-surf:rgba(255,255,255,.08);--c-surf-2:rgba(255,255,255,.16);--c-line:rgba(255,255,255,.3);--c-txt-2:#d9cbe8;
+ --r-s:8px;--r-m:12px;--r-l:18px;--r-pill:999px;
+ --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;
+ --fs-xs:11px;--fs-s:13px;--fs-m:15px;--fs-l:18px;--fs-xl:22px;--fs-xxl:30px;
+ --sh-1:0 4px 12px rgba(0,0,0,.3)}
+/* buttons: one base, three variants (default/pri = pink, .alt = blue, .sec = neutral), same press/focus/disabled states */
+button{font-family:inherit;border-radius:var(--r-m);background:var(--c-pri);color:#fff;box-shadow:0 3px 0 var(--c-pri-d);transition:transform .08s,box-shadow .08s,filter .15s}
+button:hover:not(:disabled){filter:brightness(1.08)}
+button:active:not(:disabled){transform:translateY(2px);box-shadow:0 1px 0 var(--c-pri-d)}
+button:focus-visible{outline:3px solid var(--c-acc);outline-offset:2px}
+button.pri,#startBtn,#mpBtn{background:linear-gradient(var(--c-pri-2),var(--c-pri));box-shadow:0 4px 0 var(--c-pri-d);border-radius:var(--r-pill)}
+button.alt,#mpBtn{background:linear-gradient(var(--c-alt-2),var(--c-alt));box-shadow:0 4px 0 var(--c-alt-d)}
+button.sec{background:var(--c-surf-2);box-shadow:0 3px 0 rgba(0,0,0,.3);border:0}
+button:disabled{background:#5a5468!important;box-shadow:none!important;opacity:.6;cursor:not-allowed;filter:none}
+#startBtn{animation:none}
+#touch button,#stick,.mapc,.chc,.iconbtn,#mute,#auto,#helpBtn,#spec button,#tipSkip{box-shadow:none}
+#touch button:active{transform:none}
+/* chips (segmented toggles): difficulty, help tabs, settings */
+.diffrow button,#helpTabs button,#helpBody .seg button{border-radius:var(--r-pill);background:var(--c-surf-2);border:2px solid transparent;box-shadow:none}
+.diffrow button.on,#helpTabs button.on,#helpBody .seg button.on{background:var(--c-pri);border-color:#fff}
+/* cards (mode / map / character): selected = accent */
+.mapc{border-radius:var(--r-m);border-color:var(--c-line);background:var(--c-surf)}
+.mapc.sel{border-color:var(--c-acc);background:rgba(255,216,77,.2);box-shadow:0 0 0 2px rgba(255,216,77,.35)}
+/* icon buttons (round, translucent) */
+.iconbtn,#helpBtn,#mute{width:38px;height:38px;padding:0;margin:0;border-radius:50%;font-size:18px;line-height:1;background:rgba(0,0,0,.45);border:2px solid var(--c-line)}
+#mute{width:auto;min-width:38px;padding:0 10px;border-radius:var(--r-pill)}
+#auto{border-radius:var(--r-pill);background:rgba(0,0,0,.45);border:2px solid var(--c-line);height:38px;top:12px}
+/* panels */
+.panel{background:var(--c-panel);border:2px solid var(--c-line);border-radius:var(--r-l);box-shadow:var(--sh-1)}
+.panel h2{font-size:var(--fs-xl);color:var(--c-acc);font-weight:normal}
+.note{font-size:var(--fs-s);color:var(--c-txt-2);opacity:1}
+.panel input,.panel select{font-family:inherit;border-radius:var(--r-s);border:2px solid var(--c-line);background:#fff;color:#2b1f45}
+.tfoot,.mppanel .lbtns,.hpanel .lbtns{background:linear-gradient(transparent,#3a2050 30%)}
+#mpMsg,#lobbyMsg{color:var(--c-ok)}#mpMsg.err,#lobbyMsg.err{color:var(--c-err)}
+#slots .slot{border-radius:var(--r-m)}#slots .slot button{background:var(--c-danger);box-shadow:none;border-radius:var(--r-pill)}#slots .rd.on{color:var(--c-ok)}
+#chatLog{border-radius:var(--r-s)}
+.mppanel .lbtns{display:flex;flex-wrap:wrap;gap:var(--sp-2);justify-content:center}.mppanel .lbtns button{margin:0}
+.charbtn{border-radius:var(--r-pill);border:2px solid #fff;background:linear-gradient(135deg,#ff8fab,#ffb74d);box-shadow:0 3px 0 #b8576b}
+/* title: numbered steps 1 모드 → 2 맵 → 3 캐릭터 → 4 시작; help/settings behind ❓/⚙️ */
+.tpanel{position:relative}
+.ttop{position:absolute;top:var(--sp-3);right:var(--sp-3);display:flex;gap:var(--sp-2);z-index:4}
+.step{background:var(--c-surf);border:1px solid rgba(255,255,255,.12);border-radius:var(--r-m);padding:var(--sp-2) var(--sp-3);margin:var(--sp-2) 0}
+.step .mlabel{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-m);margin-bottom:var(--sp-2)}
+.sn{display:inline-grid;place-items:center;flex:0 0 auto;width:22px;height:22px;border-radius:50%;background:var(--c-pri);color:#fff;font:normal 13px/1 Jua,sans-serif;border:2px solid #fff}
+.step .charbtn{margin:0 auto}
+.tfoot{align-items:center}.tfoot>button{margin:0}
+.tpanel .sub{color:var(--c-txt-2);margin:4px 0 6px}
+body:has(#title:not(.hidden)) :is(#hud,#minimap,#touch,#auto,#helpBtn,#mute,#shopHud,#stickZone,#help),
+body:has(#mp:not(.hidden)) :is(#hud,#minimap,#touch,#auto,#helpBtn,#mute,#shopHud,#stickZone,#help){display:none!important}
+/* character select: same dark panel as the rest */
+.cspanel{background:var(--c-panel)!important;color:#fff!important;border:2px solid var(--c-line)!important}
+.cspanel h2{color:var(--c-acc)}
+#charPrev{border-radius:var(--r-m);background:#fff3f8;box-shadow:inset 0 0 0 3px #ffd1e0}
+#charInfo .cni{color:var(--c-acc)}#charInfo .cti{color:var(--c-txt-2)}.csb i{color:#ff9e80}
+.chc{border-radius:var(--r-m);background:var(--c-surf);color:#fff;border-width:2px}.chc small{color:var(--c-txt-2)}
+.chc.sel{background:var(--cc);color:#fff;box-shadow:0 0 0 2px var(--c-acc)}
+#lineupNames{color:var(--c-acc)}
+.cspanel .lbtns{background:linear-gradient(transparent,#3a2050 35%);display:flex;gap:var(--sp-2);justify-content:center;flex-wrap:wrap}.cspanel .lbtns button{margin:0}
+/* HUD: same card style both boxes; results */
+#hudL,#hudR{background:rgba(30,18,50,.62);border:2px solid var(--c-line);border-radius:var(--r-l);box-shadow:var(--sh-1)}
+#hudL b,#hudR b{color:var(--c-acc);-webkit-text-stroke:0}
+#itemSlot{border-radius:var(--r-m);border:2px solid var(--c-line);background:rgba(30,18,50,.62)}
+#finish.pod .panel{background:linear-gradient(160deg,rgba(48,34,77,.9),rgba(63,31,82,.9));border:2px solid var(--c-line);border-radius:var(--r-l)}
+#finish.pod h1{color:var(--c-acc);font-weight:normal}
+.rrank .me{color:var(--c-acc)}
+#finish .panel #restart{box-shadow:0 4px 0 var(--c-pri-d)}
+#spec{border-radius:var(--r-pill);border:2px solid #fff}#spec button{border-radius:var(--r-pill)}
+@media (min-width:701px) and (min-height:521px){
+ .panel.tpanel{padding:16px 28px 0;width:min(680px,94vw);max-width:none;line-height:1.4}
+ .tpanel .logo{font-size:40px;line-height:1}.tpanel h1{font-size:36px}.tpanel .sub{font-size:var(--fs-m)}
+ .tfoot{margin:10px -28px 0}
+ .step{display:grid;grid-template-columns:84px 1fr;align-items:center;column-gap:var(--sp-2)}
+ .step .mlabel{margin:0;grid-row:1/span 3;align-self:start;padding-top:6px}
+ .step>:not(.mlabel){grid-column:2}.step .maprow{justify-content:flex-start}.step .diffrow{justify-content:flex-start}.step .note{text-align:left}
+ .step .charbtn{margin:0;justify-self:start}
+}
+/* phones: compact HUD — icons only, low-value stats hidden; tap a HUD box to expand */
+#hud .hx{display:inline}#hudL,#hudR{cursor:pointer}
+@media (max-width:700px),(max-height:500px){
+ .ttop{top:var(--sp-2);right:var(--sp-2);gap:6px}.iconbtn,#helpBtn{width:32px;height:32px;font-size:15px}#mute{height:32px;min-width:32px}#auto{height:32px;top:8px}
+ .step{padding:6px var(--sp-2);margin:6px 0}.step .mlabel{font-size:var(--fs-s);margin-bottom:4px}.sn{width:18px;height:18px;font-size:11px}
+ #hud .hl{display:none}
+ #hudL>div:has(#best),#hudR>div:has(#knocked),#hudR>div:has(#spilled),#hudB>.small{display:none}
+ #hudR::after{content:"▾";font-size:10px;opacity:.7;margin-left:4px}
+ body.hudmore #hudL>div:has(#best),body.hudmore #hudR>div:has(#knocked),body.hudmore #hudR>div:has(#spilled){display:block}
+ body.hudmore #hud .hl{display:inline}body.hudmore #hudR::after{content:"▴"}
+ #hudR{display:flex;flex-direction:column;align-items:flex-end}
+ #hudL,#hudR{border-radius:var(--r-m)}
+}
