@@ -1,9 +1,10 @@
+import _env  # noqa: F401  (base URL + ?debug=1)
 import asyncio, sys, json
 from playwright.async_api import async_playwright
 ARGS=["--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader"]
 BASE=sys.argv[1] if len(sys.argv)>1 else "http://localhost:8080/"
 O="/workspace/cart-race-shots/fit10-"
-VPS=[("s20-toolbar",412,780),("s20",412,915),("s9",412,846),("small360",360,640),("se",375,667),("ip13",390,664),
+VPS=[("narrow320",320,658),("s20-toolbar",412,780),("s20",412,915),("s9",412,846),("small360",360,640),("se",375,667),("ip13",390,664),
      ("s20-land",915,360),("s20-land-full",915,412),("small-land",640,360),("se-land",667,375),("ip13-land",844,390)]
 VPS=[v for v in VPS if len(sys.argv)<3 or v[0] in sys.argv[2].split(",")]
 AUDIT="""(mustSel)=>{const W=innerWidth,H=innerHeight,bad=[];
@@ -38,7 +39,7 @@ async def run(b, name, w, h):
         else:
             btnIn=await ev(f"(()=>{{const r=document.querySelector('{btn}').getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight}})()")
             res[tag+"-swipe"]=f"fits (no scroll needed) btnVisible={btnIn}" + ("" if btnIn else " FAIL")
-    await pg.goto(BASE+"?map=mart&nointro"); await pg.wait_for_function("window.__game&&__game.N>0",timeout=30000); await asyncio.sleep(0.8)
+    await pg.goto(BASE+"?debug=1&map=mart&nointro"); await pg.wait_for_function("window.__game&&__game.N>0",timeout=30000); await asyncio.sleep(0.8)
     await audit("title"); await swipetest("title", ".tpanel", "#startBtn")
     await ev("document.querySelector('.tpanel').scrollTop=0")
     await ev("s=>{const e=document.querySelector(s);e.scrollIntoView({block:'center'});e.click()}", "#charBtn"); await asyncio.sleep(0.8); await audit("charsel"); await swipetest("charsel", ".cspanel", "#charOk")
@@ -53,10 +54,13 @@ async def run(b, name, w, h):
     await ev("s=>{const e=document.querySelector(s);e.scrollIntoView({block:'center'});e.click()}", "#startBtn"); await pg.wait_for_function("__game.state==='race'",timeout=60000); await asyncio.sleep(2.5)
     await ev("__game.pa('현재 1위는 노랑 카트 고객님입니다!')"); await asyncio.sleep(0.6)
     await audit("race")
+    ov=await ev("""(()=>{const bs=[...document.querySelectorAll('#touch button')].filter(e=>e.getBoundingClientRect().width>0).map(e=>[e.dataset.key||e.className,e.getBoundingClientRect()]);const o=[];
+      for(let i=0;i<bs.length;i++)for(let j=i+1;j<bs.length;j++){const a=bs[i][1],b=bs[j][1];const x=Math.min(a.right,b.right)-Math.max(a.left,b.left),y=Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top);if(x>1&&y>1)o.push('OVERLAP '+bs[i][0]+'x'+bs[j][0])}return o})()""")
+    res["touch-overlap"]=ov
     await ev("__game.debugNearFinish()"); await ev("__game.keys.ArrowUp=true")
     await pg.wait_for_function("__game.podium",timeout=60000); await asyncio.sleep(1.2); await audit("podium")
     # shop: spectate + receipt
-    await pg.goto(BASE+"?map=freezer&mode=shop&nointro"); await pg.wait_for_function("window.__game&&__game.N>0",timeout=30000)
+    await pg.goto(BASE+"?debug=1&map=freezer&mode=shop&nointro"); await pg.wait_for_function("window.__game&&__game.N>0",timeout=30000)
     await ev("s=>{const e=document.querySelector(s);e.scrollIntoView({block:'center'});e.click()}", "#startBtn"); await pg.wait_for_function("__game.state==='race'",timeout=60000); await ev("__game.simulate(3)")
     await ev("(()=>{const g=__game,p=g.player,sh=g.shop;for(const k of sh.S(p).list) if(!sh.has(p,k)) sh.S(p).items.push({k,sale:0,broken:0,wrong:0});g.debugNearFinish();g.keys.ArrowUp=true})()")
     await pg.wait_for_function("__game.player.finished",timeout=30000); await asyncio.sleep(1.2); await audit("spectate")

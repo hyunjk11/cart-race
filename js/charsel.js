@@ -1,6 +1,7 @@
 // Character select: rotating 3D preview + roster cards (title & lobby).
 import * as THREE from 'three';
 import { ROSTER, CHAR, charOf, makeRacer, makeDeco, statBar } from './chars.js';
+import { LS } from './store.js';
 
 const $ = id => document.getElementById(id);
 let preview = null, sel = null, onPick = null, locked = false;
@@ -43,11 +44,11 @@ export function renderCharCards(el, current, { locked = false, onClick } = {}) {
   el.querySelectorAll('[data-char]').forEach(b => b.onclick = () => { if (locked) return; onClick?.(b.dataset.char); });
 }
 export function openCharSel(api) {
-  onPick = api; locked = false; sel = charOf(localStorage.getItem('cartChar') || 'mango').id;
+  onPick = api; locked = false; sel = charOf(LS.get('cartChar') || 'mango').id;
   $('charSel').classList.remove('hidden'); setLineup(false); showChar(sel);
   const pick = id => { sel = id; showChar(id); renderCharCards($('charRow'), sel, { onClick: pick }); };
   renderCharCards($('charRow'), sel, { onClick: pick });
-  $('charOk').onclick = () => { localStorage.setItem('cartChar', sel); $('charSel').classList.add('hidden'); onPick?.(sel); };
+  $('charOk').onclick = () => { LS.set('cartChar', sel); $('charSel').classList.add('hidden'); onPick?.(sel); };
   $('charLineup').onclick = () => setLineup(!(preview && preview.lineup));
   $('charBack').onclick = () => { $('charSel').classList.add('hidden'); onPick?.(null); };
 }
@@ -67,5 +68,4 @@ export function tickCharPrev(dt) {
   else { P.cam.position.set(0, 1.6, 4.2); P.cam.lookAt(0, 1.1, 0); }
   P.r.render(P.sc, P.cam);
 }
-export function disposeCharPrev() { if (!preview) return; if (preview.racer) preview.racer.dispose(); preview.r.dispose(); preview = null; }
 export { ROSTER, CHAR, charOf };

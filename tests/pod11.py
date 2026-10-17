@@ -1,3 +1,4 @@
+import _env  # noqa: F401  (base URL + ?debug=1)
 import asyncio
 from playwright.async_api import async_playwright
 ARGS=["--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader"]

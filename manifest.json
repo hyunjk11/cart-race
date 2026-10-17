@@ -1,0 +1,17 @@
+{
+  "name": "마트 카트 레이싱",
+  "short_name": "카트레이싱",
+  "description": "쇼핑카트 레이싱 게임 — 드리프트, 아이템, 장보기 모드, 4인 멀티플레이",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#2a1f3d",
+  "theme_color": "#ff4f8b",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

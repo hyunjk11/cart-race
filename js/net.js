@@ -1,5 +1,6 @@
 // Online multiplayer: host-authoritative P2P over WebRTC using PeerJS (public PeerJS cloud broker).
 import { ROSTER, charOf } from './chars.js';
+import { LS } from './store.js';
 const $ = id => document.getElementById(id);
 const PREFIX = 'cartrace-';
 const COLORS = ['#ff4f8b', '#43d17a', '#ffc107', '#9c5cff'];
@@ -18,10 +19,10 @@ const ERR = {
   'webrtc': 'WebRTC 연결에 실패했습니다 (방화벽/회사망에서 차단될 수 있어요).',
 };
 function msg(t, err) { const el = $('mpMsg'); el.textContent = t || ''; el.className = err ? 'err' : ''; const l = $('lobbyMsg'); if (l) { l.textContent = t || ''; l.className = err ? 'err' : ''; } }
-function nick() { let n = ($('nick').value || '').trim().slice(0, 10); if (!n) n = '플레이어' + ((Math.random() * 900 + 100) | 0); $('nick').value = n; localStorage.setItem('cartNick', n); return n; }
+function nick() { let n = ($('nick').value || '').trim().slice(0, 10); if (!n) n = '플레이어' + ((Math.random() * 900 + 100) | 0); $('nick').value = n; LS.set('cartNick', n); return n; }
 async function loadPeer() {
   if (Peer) return Peer;
-  try { Peer = (await import('https://cdn.jsdelivr.net/npm/peerjs@1.5.4/+esm')).Peer; }
+  try { Peer = (await import('peerjs')).Peer; } // vendor/peerjs.mjs (esbuild bundle of peerjs@1.5.4 ESM), mapped in index.html
   catch (e) { msg('PeerJS 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인하세요.', true); throw e; }
   return Peer;
 }
@@ -171,7 +172,7 @@ setInterval(() => {
 }, 1500);
 export function initNet(gameApi) {
   api = gameApi;
-  $('nick').value = localStorage.getItem('cartNick') || '';
+  $('nick').value = LS.get('cartNick') || '';
   $('mpBtn').onclick = () => { api.onMenu(true); $('title').classList.add('hidden'); $('mp').classList.remove('hidden'); };
   $('mpBack').onclick = () => { api.onMenu(false); $('mp').classList.add('hidden'); $('title').classList.remove('hidden'); };
   $('createBtn').onclick = () => createRoom().catch(() => {});

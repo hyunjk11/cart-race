@@ -5,22 +5,6 @@ const lm = c => new THREE.MeshLambertMaterial({ color: c });
 const skin = lm(0xf1c27d);
 
 // Simple person; pivot at feet, faces +z
-export function makePerson(shirtCol, pantsCol, armsForward = false) {
-  const root = new THREE.Group();
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.65, 0.3), lm(shirtCol)); torso.position.y = 1.15; root.add(torso);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), skin); head.position.y = 1.68; root.add(head);
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.21, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), lm(0x3e2723)); hair.position.y = 1.7; root.add(hair);
-  const legs = [], arms = [];
-  for (const s of [-1, 1]) {
-    const lp = new THREE.Group(); lp.position.set(s * 0.14, 0.82, 0); root.add(lp);
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.8, 0.22), lm(pantsCol)); leg.position.y = -0.4; lp.add(leg); legs.push(lp);
-    const ap = new THREE.Group(); ap.position.set(s * 0.36, 1.42, 0); root.add(ap);
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.6, 0.14), lm(shirtCol)); arm.position.y = -0.3; ap.add(arm); arms.push(ap);
-    if (armsForward) ap.rotation.x = -1.2;
-  }
-  return { root, walk(ph) { legs[0].rotation.x = Math.sin(ph) * 0.6; legs[1].rotation.x = -Math.sin(ph) * 0.6; if (!armsForward) { arms[0].rotation.x = -Math.sin(ph) * 0.5; arms[1].rotation.x = Math.sin(ph) * 0.5; } } };
-}
-
 // wire grid on a box: lines along each face
 function wireBasket(w, h, d, step) {
   const v = [];
