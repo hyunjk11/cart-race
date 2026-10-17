@@ -26,7 +26,7 @@ Useful query params: `?map=mart|freezer|parking|skywalk`, `?mode=shop`, `?notime
 | `js/fun.js` `js/shop.js` `js/fx.js` `js/audio.js` | items/hazards, shopping mode, effects, synthesized audio |
 | `js/net.js` | multiplayer (PeerJS) |
 | `js/store.js` | safe localStorage + `DEBUG` flag |
-| `vendor/` | pinned three.js r160, cannon-es 0.20, PeerJS 1.5.4 (no CDN at runtime) |
+| `vendor/` | tree-shaken minified three.js r160 + cannon-es 0.20 bundles (`python3 tools/bundle.py`, rerun after using a new THREE./CANNON. export), PeerJS 1.5.4 (no CDN at runtime) |
 | `fonts/jua.woff2` | Jua font subset to the characters the game uses |
 | `icons/`, `manifest.json`, `sw.js` | PWA icons, share image, offline service worker |
 | `tools/` | maintenance scripts (below) |
