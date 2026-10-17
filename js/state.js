@@ -10,6 +10,7 @@
 export const S = {
   autoAccel: null,
   cd: 3.99,
+  coinsDone: null, // this run's coin award (results.js), reset at race start
   cut: null,
   cutDone: null,
   firstFinT: 0,
@@ -23,6 +24,7 @@ export const S = {
   N: 0,
   netAcc: 0,
   paused: false,
+  PSTATS: false,
   player: null,
   raceT: 0,
   shake: 0,

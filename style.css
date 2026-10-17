@@ -419,3 +419,9 @@ body:has(#mp:not(.hidden)) :is(#hud,#minimap,#touch,#auto,#helpBtn,#mute,#shopHu
  #hudR{display:flex;flex-direction:column;align-items:flex-end}
  #hudL,#hudR{border-radius:var(--r-m)}
 }
+/* G3: coins (🪙) breakdown on results */
+.coinbox{background:rgba(255,216,77,.12);border:2px solid var(--c-acc);border-radius:var(--r-m);padding:var(--sp-2) var(--sp-3);margin:var(--sp-2) auto;max-width:330px;text-align:left;font-size:var(--fs-s);line-height:1.5}
+.coinbox .cbh{text-align:center;font:var(--fs-l) Jua,sans-serif;color:var(--c-acc)}.coinbox .cbh b{font-weight:normal;color:#fff}
+.coinbox{display:flex;flex-wrap:wrap;justify-content:center;gap:2px 6px}.coinbox .cbh,.coinbox .cbt{flex:1 0 100%}
+.coinbox .cbl{display:inline-flex;gap:4px;background:var(--c-surf);border-radius:var(--r-pill);padding:0 8px;white-space:nowrap}.coinbox .cbl b{color:var(--c-acc)}
+.coinbox .cbt{border-top:1px dashed var(--c-line);margin-top:4px;padding-top:4px;color:var(--c-txt-2);text-align:center}.coinbox .cbt b{color:var(--c-acc)}

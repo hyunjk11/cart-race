@@ -64,6 +64,7 @@ function rejoinRace(r) {
   }
   S.raceT = +r.raceT || 0;
   if (r.spec) {
+    S.player.lateSpec = true; // watched only: no coins
     ctx.startSpectate();
     flash('👀 레이스가 진행 중이에요 — 관전하다가 다음 레이스부터 참가합니다');
     S.msgT = 5;
@@ -395,7 +396,7 @@ export function mpTick(dt) {
         const act = ctx.carts.filter(c => !c.inactive);
         const order = [...ctx.finishOrder.filter(c => !c.inactive), ...act.filter(c => !c.finished).sort((a, b) => b.prog - a.prog)];
         if (ctx.SHOPON()) hostResults(shopRows().map(r => ({ name: r.name, time: r.time, bot: r.bot, i: r.i, score: r.score, rc: r.rc })));
-        else hostResults(order.map(c => ({ name: c.name, time: c.finished ? c.time : null, bot: !!c.ai })));
+        else hostResults(order.map(c => ({ name: c.name, time: c.finished ? c.time : null, bot: !!c.ai, i: ctx.carts.indexOf(c) })));
       }
     }
   }

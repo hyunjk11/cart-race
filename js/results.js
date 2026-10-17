@@ -8,6 +8,14 @@ import { textSprite, hAt } from './track.js';
 import { won } from './shop.js';
 import { S, ctx } from './state.js';
 import { $, stripTags } from './util.js';
+import { awardCoins } from './parts.js';
+
+/** Award this run's coins once (place 1-based, 0 = not finished) and return the breakdown HTML for the results panel. */
+function coinBox(place, shop) {
+  if (!S.coinsDone) S.coinsDone = awardCoins({ place, chaos: ctx.chaos(), drifts: S.player.drifts || 0, shop });
+  const r = S.coinsDone;
+  return `<div class="coinbox" id="coinBox"><div class="cbh">🪙 코인 <b>+${r.total}</b></div>${r.lines.map(l => `<div class="cbl"><span>${stripTags(l[0])}</span><b>+${l[1]}</b></div>`).join('')}<div class="cbt">보유 🪙 <b>${r.balance.toLocaleString('ko-KR')}</b> · 🔧 차고에서 파츠를 사 보세요</div></div>`;
+}
 
 function endRace() {
   ctx.endSpectate();
@@ -18,7 +26,7 @@ function endRace() {
       const rows = shopRows(),
         me = rows.findIndex(r => r.c === S.player);
       $('finTitle').textContent = me === 0 ? '🏆 장보기 1등!' : `장보기 ${me + 1}위`;
-      $('finBody').innerHTML = receiptHTML(rows, ctx.carts.indexOf(S.player));
+      $('finBody').innerHTML = receiptHTML(rows, ctx.carts.indexOf(S.player)) + coinBox(me + 1, { got: rows[me].rc.got, n: rows[me].rc.n });
       $('finish').classList.add('pod', 'shop');
       $('finish').classList.remove('hidden');
       FX.showPodium(
@@ -32,7 +40,7 @@ function endRace() {
     const rows = ctx.finishOrder.map((c, i) => `${i + 1}위 ${c.name} — ${ctx.fmt(c.time)}`).join('<br>');
     const best = ctx.getBest(TR.MAP_ID);
     $('finBody').innerHTML =
-      `${rows}<br><br>기록: <b>${ctx.fmt(S.player.time)}</b> · 맵: ${TR.MAP.icon} ${TR.MAP.name}<br>🏅 이 맵 최고 랩: <b>${best ? ctx.fmt(best) : '-'}</b>${S.player.newBest ? ' <span class="nb">신기록!</span>' : ''}<br>넘어뜨린 손님: ${ctx.stats.knocked}명 · 떨어뜨린 상품: ${ctx.stats.spilled}개<br>혼돈 지수: <b>${ctx.chaos()}</b>`;
+      `${rows}<br><br>기록: <b>${ctx.fmt(S.player.time)}</b> · 맵: ${TR.MAP.icon} ${TR.MAP.name}<br>🏅 이 맵 최고 랩: <b>${best ? ctx.fmt(best) : '-'}</b>${S.player.newBest ? ' <span class="nb">신기록!</span>' : ''}<br>넘어뜨린 손님: ${ctx.stats.knocked}명 · 떨어뜨린 상품: ${ctx.stats.spilled}개<br>혼돈 지수: <b>${ctx.chaos()}</b>${coinBox(rank > 0 ? rank : 0, null)}`;
     $('finish').classList.add('pod');
     $('finish').classList.remove('shop', 'hidden');
     const rest = ctx.carts.filter(c => !c.inactive && !ctx.finishOrder.includes(c)).sort((a, b) => b.prog - a.prog);
@@ -79,12 +87,21 @@ function showResults(rows) {
   ctx.endSpectate();
   S.state = 'finished';
   $('finTitle').textContent = rows[0] && rows[0].rc ? '🧾 장보기 결과' : '🏁 레이스 결과';
-  if (rows[0] && rows[0].rc) $('finBody').innerHTML = receiptHTML(rows, ctx.carts.indexOf(S.player)) + '<i>잠시 후 로비로 돌아갑니다…</i>';
+  const myI = ctx.carts.indexOf(S.player),
+    me = rows.findIndex(r => r.i === myI),
+    mine = rows[me];
+  const coins =
+    S.player.lateSpec || me < 0
+      ? ''
+      : coinBox(mine.time != null || mine.rc ? me + 1 : 0, mine.rc ? { got: mine.rc.got, n: mine.rc.n } : null);
+  if (rows[0] && rows[0].rc) $('finBody').innerHTML = receiptHTML(rows, myI) + coins + '<i>잠시 후 로비로 돌아갑니다…</i>';
   else
     $('finBody').innerHTML =
       rows
         .map((r, i) => `${i + 1}위 ${r.name.replace(/[<>&]/g, '')}${r.bot ? ' 🤖' : ''} — ${r.time != null ? ctx.fmt(r.time) : '미완주'}`)
-        .join('<br>') + '<br><br><i>잠시 후 로비로 돌아갑니다…</i>';
+        .join('<br>') +
+      coins +
+      '<br><i>잠시 후 로비로 돌아갑니다…</i>';
   $('restart').classList.add('hidden');
   const show = () => {
     $('finish').classList.add('pod');

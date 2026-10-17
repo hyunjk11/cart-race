@@ -227,7 +227,6 @@ function setCartChar(c, id) {
   c.lines = d.lines;
 }
 S.MYCHAR = charOf(LS.get('cartChar') || 'mango').id;
-S.PSTATS = false; // multiplayer: parts stat tweaks (host setting; solo always on)
 /** Equip a parts loadout on a cart: model changes always; stat tweaks only when `stats`. */
 function setCartParts(c, lo, stats) {
   c.lo = cleanLoadout(lo);
@@ -1749,6 +1748,7 @@ function resetCart(c, i) {
     gauge: 0,
     combo: 0,
     drifts: 0,
+    lateSpec: false,
     item: null,
     spin: 0,
     boostT: 0,
@@ -1795,6 +1795,7 @@ function startRaceMP(slots, you, mode) {
   finishOrder.length = 0;
   S.raceT = 0;
   S.mpDone = false;
+  S.coinsDone = null;
   S.firstFinT = 0;
   S.netAcc = 0;
   carts.forEach((c, i) => {
