@@ -18,7 +18,7 @@ export function updateComic(dt) {
     _v.set(c.x, c.y + c.t * 0.8, c.z).project(cam); if (_v.z > 1) { c.el.style.display = 'none'; continue; } c.el.style.display = '';
     c.el.style.left = ((_v.x * 0.5 + 0.5) * innerWidth) + 'px'; c.el.style.top = ((-_v.y * 0.5 + 0.5) * innerHeight) + 'px'; c.el.style.opacity = Math.min(1, (0.9 - c.t) * 4); }
 }
-export function screenFlash(col = '#fff', a = 0.45) { const f = $('flash'); f.style.transition = 'none'; f.style.background = col; f.style.opacity = a; void f.offsetWidth; f.style.transition = 'opacity .35s'; f.style.opacity = 0; }
+export function screenFlash(col = '#fff', a = 0.45) { if (document.body.classList.contains('reduce-motion')) return; const f = $('flash'); f.style.transition = 'none'; f.style.background = col; f.style.opacity = a; void f.offsetWidth; f.style.transition = 'opacity .35s'; f.style.opacity = 0; }
 export function setSpeedLines(k) { const s = $('speedlines'); if (LOW) { s.style.opacity = 0; return; } s.style.opacity = k.toFixed(2); }
 
 // ---------- confetti (instanced) ----------
