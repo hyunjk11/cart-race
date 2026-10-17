@@ -15,6 +15,8 @@ import { keys, analog, initInput } from './input.js';
 import { initHelp, isHelpOpen, tutorialTick, motionOK, maybeShopTutorial } from './help.js';
 import * as __hud from './hud.js';
 import { flash, say, chatter, updateBubbles, setupMinimap, drawMinimap, announce, specUi, updateHud, updCharBtns } from './hud.js';
+import * as __results from './results.js';
+import { endRace, shopRows, showResults, toLobby, leftRoom } from './results.js';
 // G:begin — shared state for the split-out modules (generated accessors; live bindings into this file)
 const G = {
   get $() { return $; },
@@ -25,33 +27,45 @@ const G = {
   get carts() { return carts; },
   get chaos() { return chaos; },
   get customers() { return customers; },
+  get cut() { return cut; }, set cut(v) { cut = v; },
+  get cutDone() { return cutDone; }, set cutDone(v) { cutDone = v; },
+  get endCut() { return endCut; },
+  get endSpectate() { return endSpectate; },
   get esc() { return esc; },
   get finishOrder() { return finishOrder; },
   get fmt() { return fmt; },
+  get fun() { return fun; }, set fun(v) { fun = v; },
   get getBest() { return getBest; },
   get IS_TOUCH() { return IS_TOUCH; },
   get MODE() { return MODE; }, set MODE(v) { MODE = v; },
   get msgT() { return msgT; }, set msgT(v) { msgT = v; },
   get MYCHAR() { return MYCHAR; }, set MYCHAR(v) { MYCHAR = v; },
+  get nameTag() { return nameTag; },
   get netSay() { return netSay; },
   get nRiders() { return nRiders; },
   get pick() { return pick; },
   get player() { return player; }, set player(v) { player = v; },
+  get pushOut() { return pushOut; },
   get raceT() { return raceT; }, set raceT(v) { raceT = v; },
+  get resetCart() { return resetCart; },
+  get retarget() { return retarget; },
   get shop() { return shop; }, set shop(v) { shop = v; },
   get shopHudSig() { return shopHudSig; }, set shopHudSig(v) { shopHudSig = v; },
   get SHOPON() { return SHOPON; },
+  get showIntro() { return showIntro; },
   get spec() { return spec; }, set spec(v) { spec = v; },
   get specCart() { return specCart; },
   get specList() { return specList; },
   get specSig() { return specSig; }, set specSig(v) { specSig = v; },
   get standSig() { return standSig; }, set standSig(v) { standSig = v; },
+  get startCut() { return startCut; },
   get state() { return state; }, set state(v) { state = v; },
   get stats() { return stats; },
   get TLIM() { return TLIM; }, set TLIM(v) { TLIM = v; },
-  get traffic() { return traffic; }
+  get traffic() { return traffic; },
+  get world() { return world; }
 };
-__hud.bind(G); 
+__hud.bind(G); __results.bind(G); 
 // G:end
 
 const $ = id => document.getElementById(id);
@@ -443,22 +457,6 @@ function updateCustomers(dt) {
   }
 }
 
-function endRace() {
-  endSpectate(); state = 'finished'; startCut(SHOPON() ? shopRows()[0].c : finishOrder[0] || player);
-  cutDone = () => {
-    if (SHOPON()) { const rows = shopRows(), me = rows.findIndex(r => r.c === player); $('finTitle').textContent = me === 0 ? '🏆 장보기 1등!' : `장보기 ${me + 1}위`;
-      $('finBody').innerHTML = receiptHTML(rows, carts.indexOf(player)); $('finish').classList.add('pod', 'shop'); $('finish').classList.remove('hidden');
-      FX.showPodium(rows.map(r => ({ name: r.name, char: r.c.char, color: r.c.color })), textSprite); return; }
-    const rank = finishOrder.indexOf(player) + 1;
-    $('finTitle').textContent = rank === 1 ? '🏆 우승!' : `결승! ${rank}위`;
-    const rows = finishOrder.map((c, i) => `${i + 1}위 ${c.name} — ${fmt(c.time)}`).join('<br>');
-    const best = getBest(TR.MAP_ID);
-    $('finBody').innerHTML = `${rows}<br><br>기록: <b>${fmt(player.time)}</b> · 맵: ${TR.MAP.icon} ${TR.MAP.name}<br>🏅 이 맵 최고 랩: <b>${best ? fmt(best) : '-'}</b>${player.newBest ? ' <span class="nb">신기록!</span>' : ''}<br>넘어뜨린 손님: ${stats.knocked}명 · 떨어뜨린 상품: ${stats.spilled}개<br>혼돈 지수: <b>${chaos()}</b>`;
-    $('finish').classList.add('pod'); $('finish').classList.remove('shop', 'hidden');
-    const rest = carts.filter(c => !c.inactive && !finishOrder.includes(c)).sort((a, b) => b.prog - a.prog);
-    FX.showPodium([...finishOrder, ...rest].map(c => ({ name: c.name, char: c.char, color: c.color })), textSprite);
-  };
-}
 const chaos = () => stats.knocked * 100 + stats.spilled * 10;
 const fmt = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, '0')}`;
 
@@ -518,19 +516,9 @@ function shopFx(c, f) {
     if (c === player) { flash('🥚 계란이 깨졌다! 다시 담아야 해요 (-150점)'); sound.clatter(3); }
   }
 }
-function shopRows() {
-  const act = carts.filter(c => !c.inactive), fin = finishOrder.filter(c => !c.inactive);
-  return act.map(c => { const r = fin.indexOf(c), sc = shop.score(c, r, c.finished && r >= 0, c.time); return { c, name: c.name, time: c.finished ? c.time : null, bot: !!c.ai, i: carts.indexOf(c), score: sc.score, rc: sc }; })
-    .sort((a, b) => b.score - a.score || (a.time ?? 1e9) - (b.time ?? 1e9));
-}
+
 const esc = t => String(t).replace(/[<>&]/g, '');
-function receiptHTML(rows, me) {
-  const r = rows.find(x => x.i === me) || rows[0], rc = r.rc, sum = rc.lines.reduce((a, l) => a + l[1], 0);
-  const L = rc.lines.map(l => `<tr class="${l[2] < 0 ? 'neg' : l[1] ? '' : 'miss'}"><td>${esc(l[0])}</td><td>${l[1] ? won(l[1]) : '-'}</td><td>${l[2] > 0 ? '+' : ''}${l[2] || ''}</td></tr>`).join('');
-  const B = rc.bonus.map(b => `<tr class="bon"><td colspan="2">${esc(b[0])}</td><td>+${b[1]}</td></tr>`).join('');
-  return `<div class="receipt"><div class="rh">🛒 ${esc(TR.MAP.name)} 마트<br><small>영수증 · ${esc(r.name)} 고객님 · 목록 ${rc.got}/${rc.n}</small></div><table>${L}<tr class="sep"><td>결제 금액</td><td>${won(sum)}</td><td></td></tr>${B}</table><div class="rt">총점 <b>${rc.score.toLocaleString('ko-KR')}점</b></div><div class="rb">||| |||| || ||||| | |||</div></div>`
-    + `<div class="rrank">${rows.map((x, k) => `<div class="${x.i === me ? 'me' : ''}">${k + 1}위 ${esc(x.name)}${x.bot ? ' 🤖' : ''} · <b>${x.score.toLocaleString('ko-KR')}점</b> · ${x.rc.got}/${x.rc.n} · ${x.time != null ? fmt(x.time) : '미계산'}</div>`).join('')}</div>`;
-}
+
 function renderModes() {
   const host = NET.mode === 'host', guest = NET.mode === 'guest';
   for (const [elId, lobby] of [['modeRow', false], ['lobbyModes', true]]) {
@@ -674,9 +662,7 @@ function endCut() { if (!cut) return; cut = null; $('cutbar').classList.remove('
 let cutDone = null;
 addEventListener('keydown', e => { if (cut && cut.t > 0.6 && !e.repeat && e.code !== 'ArrowUp') endCut(); });
 addEventListener('pointerdown', e => { if (cut && cut.t > 0.6 && !e.target.closest?.('#mute,#auto,#finish')) endCut(); });
-function podiumFromRows(rows) {
-  return rows.slice(0, 3).map(r => { const c = carts.find(k => k.name === r.name) || carts.find(k => r.name.startsWith(k.baseName)); return { name: r.name, char: c && c.char, color: c ? c.color : 0x888888 }; });
-}
+
 const SOLO_SLOTS = () => { const others = ROSTER.filter(r => r.id !== MYCHAR).sort(() => Math.random() - 0.5); return carts.map((c, i) => i ? { type: 'bot', name: others[i - 1].name, char: others[i - 1].id } : { type: 'human', name: '나', char: MYCHAR }); };
 // ---------- spectator (shopping mode: after you check out, watch the others; solo can fast-forward) ----------
 let spec = null;
@@ -781,28 +767,7 @@ function mpTick(dt) {
     if (player.useItem) { player.useItem = false; if (player.item || (SHOPON() && shop.nearest(player, 3.0))) NET.send({ t: 'item' }); }
   }
 }
-function showResults(rows) {
-  endSpectate();
-  state = 'finished'; $('finTitle').textContent = rows[0] && rows[0].rc ? '🧾 장보기 결과' : '🏁 경주 결과';
-  if (rows[0] && rows[0].rc) $('finBody').innerHTML = receiptHTML(rows, carts.indexOf(player)) + '<i>잠시 후 로비로 돌아갑니다…</i>'; else $('finBody').innerHTML = rows.map((r, i) => `${i + 1}위 ${r.name.replace(/[<>&]/g, '')}${r.bot ? ' 🤖' : ''} — ${r.time != null ? fmt(r.time) : '미완주'}`).join('<br>') + '<br><br><i>잠시 후 로비로 돌아갑니다…</i>';
-  $('restart').classList.add('hidden');
-  const show = () => { $('finish').classList.add('pod'); $('finish').classList.toggle('shop', !!(rows[0] && rows[0].rc)); $('finish').classList.remove('hidden'); FX.showPodium(podiumFromRows(rows), textSprite); };
-  if (cut) { cutDone = show; cut.dur = Math.min(cut.dur, cut.t + 1.2); setTimeout(endCut, 1500); } else show();
-}
-function toLobby() {
-  endSpectate();
-  cut = null; cutDone = null; $('cutbar').classList.remove('show'); FX.hidePodium(); showIntro(false); $('finish').classList.remove('pod');
-  $('finish').classList.add('hidden'); $('restart').classList.remove('hidden'); fun.reset();
-  carts.forEach((c, i) => { const was = c.inactive; resetCart(c, i); c.inactive = was; if (was) { c.x = c.z = 999; } });
-  state = 'lobby'; $('countdown').textContent = '';
-}
-function leftRoom() {
-  endSpectate();
-  MODE = 'solo'; fun.reset(); cut = null; cutDone = null; $('cutbar').classList.remove('show'); FX.hidePodium(); showIntro(false); $('finish').classList.remove('pod');
-  carts.forEach((c, i) => { resetCart(c, i); c.g.root.visible = true; c.ai = i > 0; c.name = c.baseName; nameTag(c, null); });
-  for (const cu of customers) { cu.nt = null; if (cu.state !== 'walk' || !cu.body) { if (cu.body) { world.removeBody(cu.body); cu.body = null; } cu.state = 'walk'; cu.cart = null; cu.rush = null; cu.holder.scale.setScalar(1); cu.holder.rotation.set(0, 0, 0); cu.x = cu.holder.position.x; cu.z = cu.holder.position.z; cu.holder.position.y = 0.85 + hAt(cu.x, cu.z); pushOut(cu, 0.5); retarget(cu); } }
-  player = carts[0]; state = 'lobby'; $('finish').classList.add('hidden'); $('restart').classList.remove('hidden');
-}
+
 initNet({ getChar: () => MYCHAR, getOpts: () => optsNow(), onOpts, getMap: () => TR.MAP_ID, onMap: id => { if (id !== TR.MAP_ID) loadMap(id); }, renderMaps: () => renderMaps(), onRemoteHazard: (i, id, sh) => { const c = carts[i]; if (c && c.remote) fun.remoteHazardHit(c, id, sh); }, startRace: startRaceMP, onRemoteState, onRemoteCrash, onRemoteItem, onSpawn, slotToBot, onSnap, onSay, onSlots, showResults, toLobby, leftRoom,
   onMenu: open => { if (state === 'title' || state === 'lobby') state = open ? 'lobby' : 'title'; } });
 
