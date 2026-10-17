@@ -144,8 +144,8 @@ export function tickGarage(dt) {
   P.t += dt;
   const a = P.t * 0.5;
   if (P.lineup && P.lineup.length) {
-    P.cam.position.set(0, 3.2, 8.2);
-    P.cam.lookAt(0, 1.1, 0);
+    P.cam.position.set(0, 2.6, 6.4);
+    P.cam.lookAt(0, 1.0, 0);
     for (const c of P.lineup) {
       c.boostK = 1;
       c.update(0, dt);
@@ -167,8 +167,8 @@ export function garageLineup(list) {
   P.lineup = (list || []).map((e, i, a) => {
     const c = makeCart(0xff4f8b, e.char, { low: LS.get('cartQuality') === 'low' });
     c.setParts(e.lo);
-    c.root.position.x = (i - (a.length - 1) / 2) * 2.1;
-    c.root.rotation.y = 0.5;
+    c.root.position.set((i - (a.length - 1) / 2) * 1.95, 0, i % 2 ? -0.5 : 0.3);
+    c.root.rotation.y = 1.15;
     P.sc.add(c.root);
     return c;
   });

@@ -11,7 +11,7 @@ AUDIT="""(mustSel)=>{const W=innerWidth,H=innerHeight,bad=[];
  const vis=e=>{if(!e)return false;const s=getComputedStyle(e);if(s.display==='none'||s.visibility==='hidden'||+s.opacity<0.05)return false;const r=e.getBoundingClientRect();if(r.width<2||r.height<2)return false;let p=e;while(p){const q=getComputedStyle(p);if(q.display==='none'||q.visibility==='hidden'||+q.opacity<0.05)return false;p=p.parentElement}return true};
  const inside=r=>r.left>=-1&&r.top>=-1&&r.right<=W+1&&r.bottom<=H+1;
  const scroller=e=>{let p=e.parentElement;while(p&&p!==document.body){const q=getComputedStyle(p);if((/(auto|scroll)/.test(q.overflowY)&&p.scrollHeight>p.clientHeight+1)||(/(auto|scroll)/.test(q.overflowX)&&p.scrollWidth>p.clientWidth+1))return p;p=p.parentElement}return null};
- const top=document.querySelectorAll('#title:not(.hidden),#mp:not(.hidden),#charSel:not(.hidden),#finish:not(.hidden)');
+ const top=document.querySelectorAll('#title:not(.hidden),#mp:not(.hidden),#charSel:not(.hidden),#garage:not(.hidden),#finish:not(.hidden)');
  const roots=top.length?[top[top.length-1]]:[document.body];
  for(const R of roots) for(const e of R.querySelectorAll('button,select,input,[data-key]')){ if(!vis(e))continue; const r=e.getBoundingClientRect(); if(inside(r))continue; let sc=scroller(e), ok=false; while(sc){ if(inside(sc.getBoundingClientRect())){ok=true;break} sc=scroller(sc); } if(ok)continue; /* reachable via any enclosing scroller (e.g. a horizontal map row inside the vertically scrolling lobby panel) */ bad.push((e.id||e.textContent.trim().slice(0,14))+' '+[r.left,r.top,r.right,r.bottom].map(Math.round).join(','));}
  for(const s of mustSel){const e=document.querySelector(s); if(!vis(e))continue; const r=e.getBoundingClientRect(); if(!inside(r)) bad.push('FIT '+s+' '+[r.left,r.top,r.right,r.bottom].map(Math.round).join(','));}
@@ -45,6 +45,8 @@ async def run(b, name, w, h):
     await ev("s=>{const e=document.querySelector(s);e.scrollIntoView({block:'center'});e.click()}", "#charBtn"); await asyncio.sleep(0.8); await audit("charsel"); await swipetest("charsel", ".cspanel", "#charOk")
     await ev("s=>{const e=document.querySelector(s);e.scrollIntoView({block:'center'});e.click()}", "#charLineup"); await asyncio.sleep(0.8); await audit("lineup")
     await ev("s=>{const e=document.querySelector(s);e.scrollIntoView({block:'center'});e.click()}", "#charBack"); await asyncio.sleep(0.3)
+    await ev("__game.grantCoins(300)"); await ev("s=>{const e=document.querySelector(s);e.scrollIntoView({block:'center'});e.click()}", "#garBtn"); await asyncio.sleep(0.8); await audit("garage"); await swipetest("garage", ".gpanel", "#gAct")
+    await ev("s=>{const e=document.querySelector(s);e.scrollIntoView({block:'center'});e.click()}", "#gBack"); await asyncio.sleep(0.3)
     await ev("s=>{const e=document.querySelector(s);e.scrollIntoView({block:'center'});e.click()}", "#mpBtn"); await asyncio.sleep(0.4); await audit("mpmenu", False)
     await ev("""(()=>{document.getElementById('mpMenu').classList.add('hidden');document.getElementById('mpLobby').classList.remove('hidden');document.getElementById('roomCode').textContent='AB12';
       document.getElementById('slots').innerHTML=[0,1,2,3].map(i=>`<div class="slot"><span class="sch">🥭</span><b>플레이어${i}</b> <small class="scn">망고</small> <span class="rd on">준비 완료</span>${i?'<button>내보내기</button>':''}</div>`).join('');

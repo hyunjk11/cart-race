@@ -73,7 +73,7 @@ async def solo(b):
     # in-race modded cart
     await pg.click("#startBtn", force=True); await pg.wait_for_function("__game.state==='race'", timeout=60000)
     check(await ev("JSON.stringify(__game.player.lo)") == json.dumps(MOD, separators=(',', ':')), "race cart keeps loadout")
-    await pg.keyboard.down("ArrowUp"); await asyncio.sleep(2.5); await ev("__game.player.boostT=2"); await asyncio.sleep(0.6)
+    await pg.keyboard.down("ArrowUp"); await asyncio.sleep(4.5); await ev("__game.player.boostT=2"); await asyncio.sleep(0.8)
     await pg.screenshot(path=O + "race.png")
     await ev("__game.player.drifts=4"); c0 = await ev("__game.coins")
     await ev("__game.debugNearFinish()"); await pg.wait_for_function("__game.podium", timeout=60000); await asyncio.sleep(1.2)

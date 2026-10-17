@@ -17,10 +17,12 @@ run undef node ../tools/undef.mjs ../js/*.js ../js/config/*.js || fails+=(undef)
 run smoke python3 smoke.py || fails+=(smoke)
 run shop1-mart python3 shop1.py "$BASE" mart || fails+=(shop1)
 run banner python3 banner.py "$BASE" || fails+=(banner)
+run garage python3 garage.py "$BASE" || fails+=(garage)
 run fit10-subset python3 fit10.py "$BASE" narrow320,s20-land || fails+=(fit10)
 if [ "${MP:-0}" = 1 ]; then
   run mp python3 mp.py "$BASE" || mpfails+=(mp)
   run mprejoin python3 mprejoin.py "$BASE" || mpfails+=(mprejoin)
+  run garage-mp python3 garage.py "$BASE" --mponly || mpfails+=(garage-mp)
   run mpmigrate python3 mpmigrate.py "$BASE" || mpfails+=(mpmigrate)
 fi
 echo "CORE: ${#fails[@]} failed ${fails[*]:-}   MP(optional): ${#mpfails[@]} failed ${mpfails[*]:-}"
