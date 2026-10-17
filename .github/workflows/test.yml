@@ -1,0 +1,35 @@
+name: test
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Install
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+          npm i --no-save --no-package-lock --prefix tools espree@9 eslint-scope@7
+      - name: Serve
+        run: |
+          python3 -m http.server 8080 >/tmp/srv.log 2>&1 &
+          for i in $(seq 20); do curl -sf http://localhost:8080/ >/dev/null && break; sleep 0.5; done
+      - name: Core tests
+        run: tests/run_core.sh http://localhost:8080/
+      - name: Multiplayer tests (public PeerJS broker, allowed to fail)
+        continue-on-error: true
+        timeout-minutes: 12
+        run: |
+          cd tests
+          for t in mp.py mprejoin.py; do timeout 300 python3 $t http://localhost:8080/ /tmp/shots/ || echo "::warning::$t failed (flaky PeerJS)"; done
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: shots, path: /tmp/cart-race-shots, if-no-files-found: ignore }

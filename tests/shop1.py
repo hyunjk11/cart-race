@@ -21,6 +21,7 @@ async def run(b,m):
         hist.append(st)
         if json.loads(st)["state"]!="race": break
     print(m,info); print(m,hist[-1]); 
+    if json.loads(hist[-1])["state"]!="finished": _env.fail(m+" race did not finish")
     await asyncio.sleep(7)
     await pg.screenshot(path=f'/workspace/cart-race-shots/receipt-{m}8.png')
     body=await pg.evaluate("document.getElementById('finBody').innerText.slice(0,400)")
