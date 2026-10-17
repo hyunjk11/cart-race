@@ -10,6 +10,10 @@ export const ITEMS = {
   bag: { icon: '🛍️', name: '장바구니 미사일' }, shield: { icon: '🛡️', name: '실드' }, magnet: { icon: '🧲', name: '자석' },
 };
 const ITEM_KEYS = Object.keys(ITEMS);
+// item odds by race position: leaders get mostly defensive/drop items, the back of the pack gets catch-up items
+//                 banana puddle sign  bag  shield magnet
+const W_FRONT = [ 3,     2,     2,   0.6, 3,     0.4 ], W_BACK = [ 0.8, 0.8, 0.4, 3, 1, 3 ];
+export function itemOdds(t) { const w = W_FRONT.map((f, i) => f + (W_BACK[i] - f) * t), s = w.reduce((a, b) => a + b, 0); return w.map(x => x / s); }
 const lm = c => new THREE.MeshLambertMaterial({ color: c });
 
 function disposeObj(o) { o.traverse(n => { if (n.isSprite && n.material.map) { n.material.map.dispose(); n.material.dispose(); } }); }
@@ -94,6 +98,9 @@ export function createFun(G) {
   }
   function removeHazard(h) { scene.remove(h.mesh); if (h.type === 'puddle') h.mesh.geometry.dispose(); else if (h.type === 'sign') disposeObj(h.mesh); hazards.splice(hazards.indexOf(h), 1); }
   const bagG = new THREE.BoxGeometry(0.5, 0.55, 0.3), bagM = lm(0xff7043);
+  function rollItem(c) { // t = 0 for the leader .. 1 for last place
+    const act = carts.filter(o => !o.inactive), rank = act.filter(o => o !== c && o.prog > c.prog).length, t = act.length > 1 ? rank / (act.length - 1) : 0.5;
+    const p = itemOdds(t); let r = Math.random(); for (let i = 0; i < p.length; i++) { r -= p[i]; if (r <= 0) return ITEM_KEYS[i]; } return ITEM_KEYS[ITEM_KEYS.length - 1]; }
   function aheadOf(c) { let best = null, bd = 1e9; for (const o of carts) { if (o === c || o.finished) continue; const d = o.prog - c.prog; if (d > 0 && d < bd) { bd = d; best = o; } } return best; }
   function hit(c, by) {
     if (c.shieldT > 0) { c.shieldT = 0; G.say(c, '실드로 막았다!', 1.3, true); G.puff(c.x, 1, c.z, 0x80d8ff, 6); return; }
@@ -193,7 +200,7 @@ export function createFun(G) {
       b.cd -= dt; b.m.visible = b.cd <= 0; b.m.rotation.set(t * 0.7, t * 1.3, 0); b.m.position.y = 1.1 + b.y + Math.sin(t * 2 + b.x) * 0.15;
       if (b.cd > 0) continue;
       for (const c of carts) if (Math.hypot(c.x - b.x, c.z - b.z) < 1.7) { b.cd = 4; G.puff(b.x, 1.1, b.z, 0xffd84d, 5);
-        if (!c.item) { c.item = ITEM_KEYS[(Math.random() * ITEM_KEYS.length) | 0]; c.itemHold = 0; c.aiUseAt = 1.5 + Math.random() * 3; if (c === G.player) { sound.lap(); G.flash(`아이템 획득: ${ITEMS[c.item].icon} ${ITEMS[c.item].name}`); } }
+        if (!c.item) { c.item = rollItem(c); c.itemHold = 0; c.aiUseAt = 1.5 + Math.random() * 3; if (c === G.player) { sound.lap(); G.flash(`아이템 획득: ${ITEMS[c.item].icon} ${ITEMS[c.item].name}`); } }
         break; }
     }
     for (const c of carts) {

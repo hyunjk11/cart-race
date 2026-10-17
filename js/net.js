@@ -7,7 +7,7 @@ const COLORS = ['#ff4f8b', '#43d17a', '#ffc107', '#9c5cff'];
 const MAX = 4;
 const qs = new URLSearchParams(location.search);
 let Peer = null, peer = null, api = null;
-export const NET = { mode: 'solo', you: 0, slots: [], conns: new Map(), hostConn: null, code: '', inRace: false, map: 'mart', opts: { gmode: 'race', tlim: true }, send() {}, broadcast() {} };
+export const NET = { mode: 'solo', you: 0, slots: [], conns: new Map(), hostConn: null, code: '', inRace: false, map: 'mart', opts: { gmode: 'race', tlim: true, diff: 'normal' }, send() {}, broadcast() {} };
 
 const ERR = {
   'peer-unavailable': '방을 찾을 수 없습니다. 코드를 확인해 주세요.',
@@ -165,8 +165,10 @@ function renderLobby() {
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // heartbeat: detect silent disconnects (closed tabs / lost networks)
+let hbLast = performance.now();
 setInterval(() => {
-  const now = performance.now();
+  const now = performance.now(), stalled = now - hbLast > 3000; hbLast = now;
+  if (stalled) { for (const k of lastSeen.keys()) lastSeen.set(k, now); if (hostSeen) hostSeen = now; } // our own tab was frozen (busy main thread / backgrounded): don't blame the peers
   if (NET.mode === 'host') { NET.broadcast({ t: 'ping' }); for (const [pid] of NET.conns) if (now - (lastSeen.get(pid) || now) > 6000) { const c = NET.conns.get(pid); try { c.close(); } catch (e) {} hostDrop(pid); } }
   if (NET.mode === 'guest') { NET.send({ t: 'ping' }); if (hostSeen && now - hostSeen > 9000) leave('호스트와의 연결이 끊어졌습니다.'); }
 }, 1500);

@@ -24,7 +24,7 @@ async def main():
                     if not v and cur is not None: runs.append(round(time.time()-cur,1)); cur=None
                     seen = seen or v
                     await asyncio.sleep(0.2)
-                ev_vis=await ev("document.getElementById('event').classList.contains('show')"); msg=await ev("document.getElementById('msg').textContent")
+                ev_vis=await ev("document.getElementById('event').classList.contains('show')"); msg=await ev("document.getElementById('msg').textContent")=='테스트 메시지'  # only our flash must have expired (others may legitimately appear)
                 box=await ev("JSON.stringify(document.getElementById('pa').getBoundingClientRect())") if False else None
                 stuck = cur is not None
                 print(dev,typ,"shown",seen,"durations",runs,"stuck",stuck,"event stuck",ev_vis,"msg stuck",bool(msg))

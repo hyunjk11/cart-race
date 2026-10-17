@@ -13,7 +13,7 @@ AUDIT="""(mustSel)=>{const W=innerWidth,H=innerHeight,bad=[];
  const scroller=e=>{let p=e.parentElement;while(p&&p!==document.body){const q=getComputedStyle(p);if((/(auto|scroll)/.test(q.overflowY)&&p.scrollHeight>p.clientHeight+1)||(/(auto|scroll)/.test(q.overflowX)&&p.scrollWidth>p.clientWidth+1))return p;p=p.parentElement}return null};
  const top=document.querySelectorAll('#title:not(.hidden),#mp:not(.hidden),#charSel:not(.hidden),#finish:not(.hidden)');
  const roots=top.length?[top[top.length-1]]:[document.body];
- for(const R of roots) for(const e of R.querySelectorAll('button,select,input,[data-key]')){ if(!vis(e))continue; const r=e.getBoundingClientRect(); if(inside(r))continue; const sc=scroller(e); if(sc&&inside(sc.getBoundingClientRect()))continue; bad.push((e.id||e.textContent.trim().slice(0,14))+' '+[r.left,r.top,r.right,r.bottom].map(Math.round).join(','));}
+ for(const R of roots) for(const e of R.querySelectorAll('button,select,input,[data-key]')){ if(!vis(e))continue; const r=e.getBoundingClientRect(); if(inside(r))continue; let sc=scroller(e), ok=false; while(sc){ if(inside(sc.getBoundingClientRect())){ok=true;break} sc=scroller(sc); } if(ok)continue; /* reachable via any enclosing scroller (e.g. a horizontal map row inside the vertically scrolling lobby panel) */ bad.push((e.id||e.textContent.trim().slice(0,14))+' '+[r.left,r.top,r.right,r.bottom].map(Math.round).join(','));}
  for(const s of mustSel){const e=document.querySelector(s); if(!vis(e))continue; const r=e.getBoundingClientRect(); if(!inside(r)) bad.push('FIT '+s+' '+[r.left,r.top,r.right,r.bottom].map(Math.round).join(','));}
  return bad}"""
 HUD=['#hudL','#hudR','#hudB','#minimap','#shopHud','#spec','#touch .dpad','#touch .tr','#pa','#mute']

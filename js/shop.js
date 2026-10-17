@@ -14,7 +14,7 @@ const GI = Object.fromEntries(GOODS.map((g, i) => [g.id, i]));
 const MAP_GOODS = { mart: ['tofu', 'milk', 'melon', 'ramen', 'egg', 'apple', 'kimchi', 'bread'], freezer: ['ice', 'mandu', 'fish', 'milk', 'egg', 'tofu', 'cheese', 'kimchi'],
   parking: ['water', 'tissue', 'cola', 'ramen', 'egg', 'washer', 'melon', 'bread'], skywalk: ['shirt', 'shoes', 'toy', 'juice', 'egg', 'cheese', 'cola', 'bread'] };
 export const PTS = { item: 200, sale: 150, wrong: -100, broken: -150, complete: 500, place: [800, 500, 300, 150], timeK: 3 };
-export const T_LIMIT = 180, LIST_N = 5, GRAB_R = 2.1, KEY_R = 3.0, GRAB_V = 8.5;
+export const T_LIMIT = 120, LIST_N = 5, GRAB_R = 2.1, KEY_R = 3.4, GRAB_V = 8.5;
 export const won = n => '₩' + Math.round(n).toLocaleString('ko-KR');
 
 function iconTex(emoji, label, col) {
@@ -78,7 +78,7 @@ export function createShop(G) {
   function newRace(active) {
     for (const s of spots) { s.sale = 0; s.cool.clear(); }
     saleNext = 14;
-    for (const c of carts) { const pool = kinds.filter(k => k !== 'egg').sort(() => Math.random() - 0.5), n = LIST_N + (Math.random() < 0.35 ? 1 : 0);
+    for (const c of carts) { const pool = kinds.filter(k => k !== 'egg').sort(() => Math.random() - 0.5), n = LIST_N; // same list length for everyone in a match
       const list = Math.random() < 0.7 ? ['egg', ...pool.slice(0, n - 1)] : pool.slice(0, n); c.shop = { list, items: [] }; c.shopSeen = 0; c.shopFx = []; c.basketN = -1; }
   }
   function grab(c, s, byKey) {
@@ -86,7 +86,7 @@ export function createShop(G) {
     s.cool.set(c, 2.5); const it = { k: s.k, sale: s.sale > 0 ? 1 : 0, broken: 0, wrong: ok ? 0 : 1 }; S(c).items.push(it);
     return true;
   }
-  function nearest(c, r) { let b = null, bd = r; for (const s of spots) { const d = Math.hypot(s.x - c.x, s.z - c.z); if (d < bd && !(s.cool.get(c) > 0)) { bd = d; b = s; } } return b; }
+  function nearest(c, r, f) { let b = null, bd = r; for (const s of spots) { const d = Math.hypot(s.x - c.x, s.z - c.z); if (d < bd && !(s.cool.get(c) > 0) && (!f || f(s))) { bd = d; b = s; } } return b; }
   function crash(c, impact) { if (c.finished) return 0; // shelf/wall crash: eggs break; very hard crash drops an item
     let ev = 0; for (const it of S(c).items) if (!it.broken && GOODS[GI[it.k]].fragile) { it.broken = 1; ev = 1; }
     if (impact > 12) drop(c, 1, 'crash');
@@ -96,7 +96,7 @@ export function createShop(G) {
   function hit(c, why) { crash(c, 0); drop(c, 1, why); }
   function aiGoal(c) {
     let best = null, bd = 1e9;
-    for (const s of spots) { if (!need(c, s.k) || s.cool.get(c) > 0) continue; const d = (s.i - c.idx + N) % N; if (d < bd && d < 34) { bd = d; best = s; } }
+    for (const s of spots) { if (!need(c, s.k) || s.cool.get(c) > 0) continue; let d = (s.i - c.idx + N) % N; if (d > N - 6 && Math.hypot(s.x - c.x, s.z - c.z) < 7) d = 0; /* just beside/behind: still go for it */ if (d < bd && d < 40) { bd = d; best = s; } }
     return best && { s: best, d: Math.hypot(best.x - c.x, best.z - c.z), di: bd };
   }
   function update(dt, state, raceT, mode) { // host/solo
@@ -106,8 +106,8 @@ export function createShop(G) {
     if (saleNext <= 0) { saleNext = 22 + Math.random() * 10; const cand = spots.filter(s => s.sale <= 0).sort(() => Math.random() - 0.5).slice(0, 2);
       for (const s of cand) s.sale = 15; if (cand.length) G.paSay(`🏷️ 타임 할인! ${cand.map(s => GOODS[GI[s.k]].n).join(', ')} 30% 할인 중입니다~!`); }
     for (const c of carts) { if (c.inactive || c.finished) continue;
-      const s = nearest(c, c.useItem ? KEY_R : GRAB_R);
-      if (s && c.useItem && Math.hypot(s.x - c.x, s.z - c.z) < KEY_R) { c.useItem = false; grab(c, s, true); }
+      const key = c.useItem || (c.ai && c.aiGrab), R = KEY_R; /* some spots sit against shelves: a cart nose-in stops ~3.4m from the centre */ c.aiGrab = false; const s = nearest(c, key ? R : GRAB_R, c.ai ? (q => need(c, q.k)) : null);
+      if (s && key && Math.hypot(s.x - c.x, s.z - c.z) < R && (!c.ai || need(c, s.k))) { c.useItem = false; grab(c, s, true); }
       else if (s && Math.hypot(s.x - c.x, s.z - c.z) < GRAB_R && Math.abs(c.v) < GRAB_V) grab(c, s, false); }
   }
   function score(c, rank, finished, time) {

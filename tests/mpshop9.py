@@ -21,6 +21,11 @@ async def main():
         await A.click('#lobbyModes [data-mode="shop"]'); await A.click('#lobbyMaps [data-map="freezer"]')
         await B.wait_for_function("__game.GMODE==='shop' && __game.MAP==='freezer'", timeout=10000)
         print("guest mode", await B.evaluate("__game.GMODE"), "locked", await B.evaluate("[...document.querySelectorAll('#lobbyModes button')].every(b=>b.disabled)"), await B.text_content("#lobbyModeNote"))
+        await A.click('#lobbyDiff [data-diff="hard"]')  # Batch C: bot difficulty is host-chosen and synced
+        await B.wait_for_function("__game.diff==='hard'", timeout=10000)
+        dl = await B.evaluate("[...document.querySelectorAll('#lobbyDiff button')].every(b=>b.disabled)")
+        print("diff synced", await B.evaluate("__game.diff"), "guest locked", dl, "host saved", await A.evaluate("localStorage.getItem('cartDiff')"))
+        assert dl and await A.evaluate("localStorage.getItem('cartDiff')") == 'hard'
         await B.screenshot(path=O+"mp-lobby9b.png")
         await B.click("#lobbyChar"); await B.click('#charRow [data-char="leo"]'); await B.click("#charOk")
         await A.click("#lobbyChar"); await A.click('#charRow [data-char="unni"]'); await A.click("#charOk")
@@ -35,7 +40,7 @@ async def main():
         for pg in (A,B): await pg.wait_for_function("__game.state==='race'", timeout=90000)
         await asyncio.sleep(1.5)
         hl=await A.evaluate("JSON.stringify(__game.carts.map(c=>__game.shop.S(c).list))"); gl=await B.evaluate("JSON.stringify(__game.carts.map(c=>__game.shop.S(c).list))")
-        print("lists synced", hl==gl, gl)
+        import json as _j; _h, _g = _j.loads(hl), _j.loads(gl); print("lists synced (active carts)", all(not g or g == h for h, g in zip(_h, _g)), gl); assert len({len(l) for l in _j.loads(gl) if l}) == 1, "list lengths differ"
         print("chars host", await A.evaluate("JSON.stringify(__game.carts.map(c=>[c.name,c.char]))"), "guest", await B.evaluate("JSON.stringify(__game.carts.map(c=>[c.name,c.char]))"))
         print("spots same", await A.evaluate("JSON.stringify(__game.shop.spots.map(s=>[s.k,+s.x.toFixed(1)]))")==await B.evaluate("JSON.stringify(__game.shop.spots.map(s=>[s.k,+s.x.toFixed(1)]))"))
         # guest drives onto a needed spot slowly

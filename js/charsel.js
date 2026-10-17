@@ -36,7 +36,7 @@ function showChar(id) {
   P.deco = makeDeco(id); if (P.deco) { P.deco.scale.set(0.9, 0.9 / 0.62, 0.9); P.cart.add(P.deco); }
   P.colM.color.setHex(def.color); P.id = id;
   const bars = (k, v) => `<div class="csb"><span>${k}</span><i>${'●'.repeat(v)}${'○'.repeat(5 - v)}</i></div>`;
-  $('charInfo').innerHTML = `<div class="cni">${def.emoji} <b>${def.name}</b></div><div class="cti">${def.title}</div><p>${def.desc}</p>${bars('속도', statBar(def.st.spd))}${bars('핸들', statBar(def.st.hdl))}${bars('드리프트', statBar(def.st.drf))}`;
+  $('charInfo').innerHTML = `<div class="cni">${def.emoji} <b>${def.name}</b></div><div class="cti">${def.title}</div><p>${def.desc}</p>${bars('속도', statBar(def.st.spd, 'spd'))}${bars('핸들', statBar(def.st.hdl))}${bars('드리프트', statBar(def.st.drf))}`;
 }
 export function renderCharCards(el, current, { locked = false, onClick } = {}) {
   if (!el) return;

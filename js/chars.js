@@ -61,35 +61,38 @@ export function faceMat() { const m = new THREE.MeshBasicMaterial({ map: getFace
 
 // ---------- roster ----------
 const L = (o) => o;
+// equal stat budget: every character has exactly 12 stat dots (speed+handling+drift). One speed dot is worth
+// +1.5% top speed, one handling/drift dot +3% (speed matters about twice as much), so 2*(spd-1)+(hdl-1)+(drf-1) = 0 for all.
+const D = (s, h, d) => ({ spd: +(1 + 0.015 * (s - 4)).toFixed(3), hdl: +(1 + 0.03 * (h - 4)).toFixed(3), drf: +(1 + 0.03 * (d - 4)).toFixed(3), dots: [s, h, d] });
 export const ROSTER = [
   { id: 'mango', name: '망고', emoji: '🥭', color: 0xffa726, title: '에너자이저 소녀', desc: '양갈래 번머리! 넘치는 에너지로 드리프트 게이지를 빨리 채워요.',
-    st: { spd: 1.0, hdl: 1.02, drf: 1.1 }, pal: { skin: 0xffe0c8, hair: 0x6d3b1f, top: 0xffd54f, bottom: 0xff7043, shoe: 0xff5252, acc: 0xff1744 }, anim: 'bouncy', win: 'jump',
+    st: D(4, 3, 5), pal: { skin: 0xffe0c8, hair: 0x6d3b1f, top: 0xffd54f, bottom: 0xff7043, shoe: 0xff5252, acc: 0xff1744 }, anim: 'bouncy', win: 'jump',
     lines: L({ start: ['가자가자~! 망고 출동!', '오늘도 신나게~!'], boost: ['망고 파워~!!', '슝슝~!'], drift: ['빙글빙글 신난다~', '꺄르르~!'], hit: ['으앗, 내 번머리!', '아야야!'], crash: ['앗 뜨거!', '꽈당!'], grab: ['찾았다 찾았다~!', '이거 맛있겠다!'], win: ['망고가 1등이다~!!', '야호~!'] }) },
   { id: 'dubu', name: '두부', emoji: '🐰', color: 0xf8bbd0, title: '졸린 토끼 소년', desc: '토끼 후드를 쓴 말랑 소년. 느긋하지만 핸들링이 부드러워요.',
-    st: { spd: 0.97, hdl: 1.08, drf: 1.0 }, pal: { skin: 0xfff0e0, hair: 0xa1887f, top: 0xffffff, bottom: 0xf48fb1, shoe: 0xffffff, acc: 0xffc1d9 }, anim: 'sleepy', win: 'sleepy', sleepy: true,
+    st: D(3, 5, 4), pal: { skin: 0xfff0e0, hair: 0xa1887f, top: 0xffffff, bottom: 0xf48fb1, shoe: 0xffffff, acc: 0xffc1d9 }, anim: 'sleepy', win: 'sleepy', sleepy: true,
     lines: L({ start: ['음냐… 벌써 출발이야?', '하암~ 갈게…'], boost: ['어… 빨라졌다…?', '우와… 바람…'], drift: ['우와아… 어지러…', '빙그르르…'], hit: ['아야… 졸려…', '으응…?'], crash: ['쿨…', '꿈인가…'], grab: ['이거… 맞지…?', '찾았다… 냠.'], win: ['이겼다… 이제 자도 돼?', '헤헤… 1등…'] }) },
   { id: 'halmi', name: '할미', emoji: '👵', color: 0xba68c8, title: '스피드광 할머니', desc: '뽀글 파마에 돋보기. 최고 속도는 빠르지만 핸들이 묵직해요.',
-    st: { spd: 1.05, hdl: 0.94, drf: 0.97 }, pal: { skin: 0xf6d5bd, hair: 0xd1c4e9, top: 0x9575cd, bottom: 0x6d4c41, shoe: 0x5d4037, acc: 0x5d4037 }, anim: 'hunch', win: 'peace',
+    st: D(5, 3, 4), pal: { skin: 0xf6d5bd, hair: 0xd1c4e9, top: 0x9575cd, bottom: 0x6d4c41, shoe: 0x5d4037, acc: 0x5d4037 }, anim: 'hunch', win: 'peace',
     lines: L({ start: ['할미 아직 안 죽었다!', '젊은이들, 따라와 봐~'], boost: ['비켜라 젊은이들~!', '할미 터보다!'], drift: ['라떼는 말이야~ 드리프트를~', '호호호~!'], hit: ['아이고 허리야!', '이놈들이!'], crash: ['아이고 내 카트!', '어머나!'], grab: ['이거 싸네!', '좋은 물건이구먼~'], win: ['할미가 최고지~ 호호', '손주들아 봤냐~!'] }) },
   { id: 'bujang', name: '김부장', emoji: '💼', color: 0x42a5f5, title: '정시 퇴근 직장인', desc: '넥타이와 서류가방. 모든 능력치가 반듯하게 평균이에요.',
-    st: { spd: 1.02, hdl: 1.0, drf: 1.0 }, pal: { skin: 0xf1c9a5, hair: 0x212121, top: 0xffffff, bottom: 0x37474f, shoe: 0x212121, acc: 0x1565c0 }, anim: 'stiff', win: 'fist',
+    st: D(4, 4, 4), pal: { skin: 0xf1c9a5, hair: 0x212121, top: 0xffffff, bottom: 0x37474f, shoe: 0x212121, acc: 0x1565c0 }, anim: 'stiff', win: 'fist',
     lines: L({ start: ['업무 시작합니다.', '정시 퇴근 간다!'], boost: ['야근 모드 ON!', '결재 속도 UP!'], drift: ['회의는 짧게! 드리프트는 길게!', '보고 체계 무시!'], hit: ['보고서가!!', '이건 인사 고과 감점이야!'], crash: ['넥타이 꼬였다!', '아 출장비…'], grab: ['결재 완료!', '법카로 결제…'], win: ['이번 분기 실적 1위!', '칼퇴 성공!'] }) },
   { id: 'ppoppi', name: '뽀삐', emoji: '🦖', color: 0x66bb6a, title: '공룡 옷 꼬마', desc: '공룡 잠옷을 입은 꼬마. 작아서 핸들링이 아주 민첩해요.',
-    st: { spd: 0.98, hdl: 1.07, drf: 1.03 }, pal: { skin: 0xffe3cf, hair: 0x5d4037, top: 0x66bb6a, bottom: 0x66bb6a, shoe: 0x43a047, acc: 0xc5e1a5 }, anim: 'waddle', win: 'roar', scale: 0.92,
+    st: D(4, 5, 3), pal: { skin: 0xffe3cf, hair: 0x5d4037, top: 0x66bb6a, bottom: 0x66bb6a, shoe: 0x43a047, acc: 0xc5e1a5 }, anim: 'waddle', win: 'roar', scale: 0.92,
     lines: L({ start: ['크아앙~!', '공룡 출동이다!'], boost: ['공룡 돌진!', '크앙크앙~!'], drift: ['빙글빙글 공룡~', '꼬리 회전!'], hit: ['으앙 엄마~', '아파 크앙…'], crash: ['쿵! 공룡도 아파!', '으앙!'], grab: ['맘마 찾았다!', '냠냠 크앙!'], win: ['뽀삐가 이겼다 크앙!', '공룡 최고!'] }) },
   { id: 'mint', name: '민트초코', emoji: '🍫', color: 0x4dd0c4, title: '쿨한 음악 소녀', desc: '선글라스와 헤드폰. 빠르고 드리프트도 깔끔하지만 살짝 예민해요.',
-    st: { spd: 1.03, hdl: 0.97, drf: 1.04 }, pal: { skin: 0xffe0c8, hair: 0x4dd0c4, top: 0x5d4037, bottom: 0x212121, shoe: 0xffffff, acc: 0x212121 }, anim: 'nod', win: 'cool',
+    st: D(5, 2, 5), pal: { skin: 0xffe0c8, hair: 0x4dd0c4, top: 0x5d4037, bottom: 0x212121, shoe: 0xffffff, acc: 0x212121 }, anim: 'nod', win: 'cool',
     lines: L({ start: ['…따라올 수 있으면 와봐.', '비트 시작.'], boost: ['비트 올린다.', '드롭!'], drift: ['이 정도는 기본.', '깔끔하지?'], hit: ['쳇.', '…짜증나.'], crash: ['내 헤드폰!', '…아웃.'], grab: ['민초는 진리.', '득템.'], win: ['당연한 결과지.', '앵콜은 없어.'] }) },
   { id: 'leo', name: '레오', emoji: '🐱', color: 0x7e57c2, title: '고양이 후드 게이머', desc: '고양이 귀 후드의 프로게이머. 드리프트 콤보 장인이에요.',
-    st: { spd: 0.99, hdl: 1.03, drf: 1.08 }, pal: { skin: 0xffe6d5, hair: 0x37474f, top: 0x9fa8da, bottom: 0x283593, shoe: 0xffffff, acc: 0xff80ab }, anim: 'lean', win: 'spin',
+    st: D(3, 4, 5), pal: { skin: 0xffe6d5, hair: 0x37474f, top: 0x9fa8da, bottom: 0x283593, shoe: 0xffffff, acc: 0xff80ab }, anim: 'lean', win: 'spin',
     lines: L({ start: ['GG 각이다냥', '게임 스타트!'], boost: ['부스트 버프 ON!', '풀악셀이다냥!'], drift: ['드리프트 콤보!', '컨트롤 보소냥'], hit: ['렉 걸렸다!!', '핵이다냥!'], crash: ['핑 튀었다!', '버그다냥!'], grab: ['아이템 획득!', '레어템이다냥'], win: ['GG~ 이지냥', '랭킹 1위다냥!'] }) },
   { id: 'unni', name: '언니', emoji: '🧁', color: 0xff8fab, title: '파티시에 언니', desc: '키 큰 셰프 모자의 제빵사. 부드럽고 균형 잡힌 주행!',
-    st: { spd: 1.0, hdl: 1.02, drf: 1.03 }, pal: { skin: 0xffe3d3, hair: 0x8d5a3b, top: 0xffffff, bottom: 0xff8fab, shoe: 0xff8fab, acc: 0xff4f8b }, anim: 'elegant', win: 'bow',
+    st: D(5, 4, 3), pal: { skin: 0xffe3d3, hair: 0x8d5a3b, top: 0xffffff, bottom: 0xff8fab, shoe: 0xff8fab, acc: 0xff4f8b }, anim: 'elegant', win: 'bow',
     lines: L({ start: ['오늘의 레시피는 1등!', '오븐 예열 완료~'], boost: ['반죽처럼 쭉쭉~', '휘핑 최고 속도!'], drift: ['휘핑~ 휘핑~', '크림처럼 부드럽게~'], hit: ['어머, 크림 다 쏟아져!', '내 케이크!'], crash: ['앗 밀가루!', '어머나!'], grab: ['신선한 재료 득템!', '이걸로 타르트를~'], win: ['달콤한 승리~♡', '오늘의 디저트는 승리!'] }) },
 ];
 export const CHAR = Object.fromEntries(ROSTER.map(r => [r.id, r]));
 export const charOf = id => CHAR[id] || ROSTER[0];
-export const statBar = v => Math.max(1, Math.min(5, Math.round((v - 0.94) / 0.03) + 1));
+export const statBar = (v, k = 'hdl') => Math.max(1, Math.min(5, Math.round((v - 1) / (k === 'spd' ? 0.015 : 0.03)) + 4));
 
 // ---------- racer model ----------
 export function makeRacer(def, opt = {}) {

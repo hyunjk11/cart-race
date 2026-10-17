@@ -42,7 +42,8 @@ async def main():
             # complete & finish
             await ev("(()=>{const g=__game,p=g.player,sh=g.shop;for(const k of sh.S(p).list) if(!sh.has(p,k)) sh.S(p).items.push({k,sale:0,broken:0,wrong:0});})()")
             await ev("__game.debugNearFinish()"); await pg.keyboard.down("ArrowUp")
-            await pg.wait_for_function("__game.podium",timeout=60000); await pg.keyboard.up("ArrowUp"); await asyncio.sleep(1.5)
+            await pg.wait_for_function("__game.player.finished",timeout=30000); await ev("__game.specFF()")  # after checkout you spectate the bots: fast-forward
+            await pg.wait_for_function("__game.podium",timeout=120000); await pg.keyboard.up("ArrowUp"); await asyncio.sleep(1.5)
             print("hud hidden", await ev("getComputedStyle(document.getElementById('hud')).display+','+getComputedStyle(document.getElementById('shopHud')).display"))
             await pg.screenshot(path=O+"receipt8.png"); await ctx.close()
         print("errors", errs); await b.close()
