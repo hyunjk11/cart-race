@@ -48,7 +48,7 @@ async def solo(b):
     mod = await ev("__game.cartInfo(0)")
     print("base", json.dumps(base)); print("mod ", json.dumps(mod))
     check(mod["lo"] == MOD, "player cart loadout = equipped")
-    check(mod["meshes"] != base["meshes"] and mod["verts"] > base["verts"] + 500, f"mesh changed: meshes {base['meshes']}->{mod['meshes']} verts {base['verts']}->{mod['verts']}")
+    check(mod["meshes"] != base["meshes"] and mod["cartVerts"] > base["cartVerts"] + 500, f"mesh changed: meshes {base['meshes']}->{mod['meshes']} cart verts {base['cartVerts']}->{mod['cartVerts']}")
     check(mod["size"] != base["size"], f"bbox changed {base['size']}->{mod['size']}")
     check(set(mod["mats"]) != set(base["mats"]), "materials changed")
     check(abs(mod["pm"]["spd"] - 1.0) < 1e-6 and abs(mod["pm"]["hdl"] - 1.02) < 1e-6 and abs(mod["pm"]["drf"] - 1.03) < 1e-6, f"solo stat mods {mod['pm']}")
@@ -56,7 +56,7 @@ async def solo(b):
     # persists after reload
     await pg.reload(); await pg.wait_for_function("window.__game&&__game.N>0", timeout=30000)
     re = await ev("__game.cartInfo(0)")
-    check(re["lo"] == MOD and re["verts"] == mod["verts"], f"loadout + model persist after reload ({re['verts']} verts)")
+    check(re["lo"] == MOD and re["cartVerts"] == mod["cartVerts"], f"loadout + model persist after reload (cart verts {mod['cartVerts']} -> {re['cartVerts']})")
     check(await ev("__game.coins") == 5000 - spent, "coins persist after reload")
     await pg.click("#garBtn"); await pg.click('#gTabs [data-slot="top"]')
     check('owned' in await ev("document.querySelector('#gList [data-part=\"wing\"]').className"), "owned state persists")
@@ -87,9 +87,9 @@ async def solo(b):
     # low quality: lighter variant of the same loadout
     c = await b.new_context(viewport={"width": 1100, "height": 650}); pg = await c.new_page(); errs = await errs_of(pg)
     await pg.goto(BASE + "?nointro"); await pg.wait_for_function("window.__game&&__game.N>0", timeout=30000)
-    await pg.evaluate(f"__game.setParts(0,{json.dumps(MOD)})"); hi = await pg.evaluate("__game.cartInfo(0).verts")
+    await pg.evaluate(f"__game.setParts(0,{json.dumps(MOD)})"); hi = await pg.evaluate("__game.cartInfo(0).cartVerts")
     await pg.evaluate("localStorage.setItem('cartQuality','low')"); await pg.reload(); await pg.wait_for_function("window.__game&&__game.N>0", timeout=30000)
-    await pg.evaluate(f"__game.setParts(0,{json.dumps(MOD)})"); lo = await pg.evaluate("__game.cartInfo(0).verts")
+    await pg.evaluate(f"__game.setParts(0,{json.dumps(MOD)})"); lo = await pg.evaluate("__game.cartInfo(0).cartVerts")
     check(lo < hi, f"low quality verts {lo} < high {hi}")
     print("ERRORS:", errs); await c.close()
     # mobile garage + fit
@@ -149,7 +149,7 @@ async def mp(b):
     check(hA[1]["lo"] == GL and hB[1]["lo"] == GL, "guest cart modded on host + guest")
     check(hA[0]["lo"] == MOD and hB[0]["lo"] == MOD, "host cart modded on host + guest")
     check(hA[2]["lo"] == hB[2]["lo"], "bot loadout identical on both")
-    check(hA[1]["verts"] == hB[1]["verts"] and hA[0]["verts"] == hB[0]["verts"], "same meshes on both peers")
+    check(hA[1]["cartVerts"] == hB[1]["cartVerts"] and hA[0]["cartVerts"] == hB[0]["cartVerts"], "same cart meshes on both peers")
     check(all(x["pm"] is None for x in hA[:2] + hB[:2]), "MP default: parts cosmetic only (no stat mods)")
     await asyncio.sleep(2); await B.keyboard.down("ArrowUp"); await asyncio.sleep(2.5); await B.screenshot(path=O + "mp-race.png")
     print("ERRORS:", {"host": ea, "guest": eb}); await ca.close(); await cb.close()

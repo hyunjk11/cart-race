@@ -2300,7 +2300,9 @@ if (DEBUG)
       const c = carts[i],
         r = c.g.root;
       let meshes = 0,
-        verts = 0;
+        verts = 0,
+        cartVerts = 0;
+      const pr = c.g.person && c.g.person.root;
       const mats = new Set();
       r.updateMatrixWorld(true);
       const box = new THREE.Box3();
@@ -2308,12 +2310,24 @@ if (DEBUG)
         if ((o.isMesh || o.isLineSegments) && o.visible && o.parent.visible && o !== c.tag) {
           meshes++;
           verts += o.geometry.attributes.position.count;
+          let q = o;
+          while (q && q !== pr) q = q.parent;
+          if (!q) cartVerts += o.geometry.attributes.position.count;
           mats.add(o.material.type + (o.material.color ? ':' + o.material.color.getHexString() : ''));
           box.expandByObject(o);
         }
       });
       const sz = box.getSize(new THREE.Vector3());
-      return { meshes, verts, mats: [...mats].sort(), size: [sz.x, sz.y, sz.z].map(v => +v.toFixed(2)), lo: c.lo, pm: c.pm, char: c.char };
+      return {
+        meshes,
+        verts,
+        cartVerts,
+        mats: [...mats].sort(),
+        size: [sz.x, sz.y, sz.z].map(v => +v.toFixed(2)),
+        lo: c.lo,
+        pm: c.pm,
+        char: c.char,
+      };
     },
     itemOdds,
     get diff() {
