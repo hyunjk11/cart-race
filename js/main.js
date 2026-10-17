@@ -20,7 +20,7 @@ import { charOf } from './chars.js';
 import { loadout, statMods, randomLoadout, cleanLoadout, addCoins, coins } from './parts.js';
 import { ROSTER } from './config/characters.js';
 import { openCharSel, tickCharPrev, setLineup } from './charsel.js';
-import { openGarage, tickGarage, garagePreview } from './garage.js';
+import { openGarage, tickGarage, garagePreview, garageLineup } from './garage.js';
 import { initAudio, sound, setEngine, setDrift } from './audio.js';
 import { LS, DEBUG } from './store.js';
 import { keys, analog } from './input.js';
@@ -2290,6 +2290,7 @@ if (DEBUG)
     analog,
     grantCoins: n => (addCoins(n), updGarBtn(), coins()),
     garagePreview,
+    garageLineup,
     get coins() {
       return coins();
     },

@@ -143,11 +143,34 @@ export function tickGarage(dt) {
   if (!P || !garageOpen()) return;
   P.t += dt;
   const a = P.t * 0.5;
-  P.cam.position.set(Math.sin(a) * 4.4, 2.3, Math.cos(a) * 4.4);
-  P.cam.lookAt(0, 1.05, -0.1);
+  if (P.lineup && P.lineup.length) {
+    P.cam.position.set(0, 3.2, 8.2);
+    P.cam.lookAt(0, 1.1, 0);
+    for (const c of P.lineup) {
+      c.boostK = 1;
+      c.update(0, dt);
+    }
+  } else {
+    P.cam.position.set(Math.sin(a) * 4.4, 2.3, Math.cos(a) * 4.4);
+    P.cam.lookAt(0, 1.05, -0.1);
+  }
   P.cart.boostK = 0.5 + 0.5 * Math.sin(P.t * 2);
   P.cart.update(0, dt);
   P.r.render(P.sc, P.cam);
 }
 /** Debug/tests: the preview cart api. */
 export const garagePreview = () => P && P.cart;
+/** Debug/screenshots: show several modded carts side by side in the preview ([{ char, lo }]); [] restores the single cart. */
+export function garageLineup(list) {
+  if (!P) return;
+  for (const c of P.lineup || []) P.sc.remove(c.root);
+  P.lineup = (list || []).map((e, i, a) => {
+    const c = makeCart(0xff4f8b, e.char, { low: LS.get('cartQuality') === 'low' });
+    c.setParts(e.lo);
+    c.root.position.x = (i - (a.length - 1) / 2) * 2.1;
+    c.root.rotation.y = 0.5;
+    P.sc.add(c.root);
+    return c;
+  });
+  P.cart.root.visible = !P.lineup.length;
+}
