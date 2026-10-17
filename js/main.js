@@ -1226,7 +1226,7 @@ hudMod.init0();
 // ---------- particle puffs ----------
 const puffs = [],
   puffG = new THREE.SphereGeometry(0.25, 6, 5);
-function puff(x, y, z, col, n) {
+function puff(x, y, z, col, n, k = 1) {
   for (let i = 0; i < n; i++) {
     let p = puffs.find(q => q.life <= 0);
     if (!p) {
@@ -1244,6 +1244,7 @@ function puff(x, y, z, col, n) {
     p.m.position.set(x, y + hAt(x, z), z);
     p.v.set(Math.random() * 4 - 2, Math.random() * 3, Math.random() * 4 - 2);
     p.life = 0.6 + Math.random() * 0.3;
+    p.k = k;
   }
 }
 function updatePuffs(dt) {
@@ -1252,7 +1253,7 @@ function updatePuffs(dt) {
     p.life -= dt;
     p.m.position.addScaledVector(p.v, dt);
     p.v.multiplyScalar(0.92);
-    p.m.scale.setScalar(1 + (1 - p.life) * 2);
+    p.m.scale.setScalar((p.k || 1) * (1 + (1 - p.life) * 2));
     p.m.material.opacity = Math.max(0, p.life);
     if (p.life <= 0) p.m.visible = false;
   }
@@ -2144,8 +2145,8 @@ function render(dt) {
       if (tc && (c.drifting || b) && Math.abs(c.v) > 6) {
         c.trT = (c.trT || 0) - dt;
         if (c.trT <= 0) {
-          c.trT = LOWFX ? 0.12 : 0.05;
-          puff(c.x - Math.sin(c.h) * 1.1, 0.3 + hAt(c.x, c.z), c.z - Math.cos(c.h) * 1.1, pick(tc), 1);
+          c.trT = LOWFX ? 0.12 : 0.06;
+          puff(c.x - Math.sin(c.h) * 1.1, 0.3, c.z - Math.cos(c.h) * 1.1, pick(tc), 1, 0.4);
         }
       }
     }
