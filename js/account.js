@@ -102,8 +102,15 @@ function onAuth(ev, session) {
 }
 
 async function checkTables() {
-  const r = await Promise.all([T.progress, T.profiles, T.records].map(t => sb.from(t).select('*', { head: true }).limit(1)));
-  const bad = r.find(x => x.error);
+  // probe each table (= GET /rest/v1/<table>?select=<col>&limit=1 with the apikey header).
+  // 404 / PGRST205 = schema.sql not run yet; 42501 (permission denied, e.g. anon on cart_progress) still means the table exists.
+  const probes = [
+    [T.progress, 'user_id'],
+    [T.profiles, 'id'],
+    [T.records, 'map'],
+  ];
+  const r = await Promise.all(probes.map(([t, c]) => sb.from(t).select(c).limit(1)));
+  const bad = r.find(x => x.error && x.error.code !== '42501');
   if (!bad) return (tables = 'ok');
   const e = bad.error;
   tables = e.code === 'PGRST205' || e.code === '42P01' || bad.status === 404 ? 'missing' : 'error';
