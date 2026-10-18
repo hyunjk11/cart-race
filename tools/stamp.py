@@ -5,7 +5,7 @@ import hashlib, pathlib, re, sys, json
 R = pathlib.Path(__file__).resolve().parent.parent
 def h(p): return hashlib.sha256((R / p).read_bytes()).hexdigest()[:10]
 js = sorted(str(p.relative_to(R)) for p in (R / 'js').rglob('*.js'))
-vend = {'three': 'vendor/three.custom.min.js', 'three/addons/utils/BufferGeometryUtils.js': 'vendor/three.custom.min.js', 'cannon-es': 'vendor/cannon.custom.min.js', 'peerjs': 'vendor/peerjs.mjs'}  # custom bundles: tools/bundle.py
+vend = {'three': 'vendor/three.custom.min.js', 'three/addons/utils/BufferGeometryUtils.js': 'vendor/three.custom.min.js', 'cannon-es': 'vendor/cannon.custom.min.js', 'peerjs': 'vendor/peerjs.mjs', 'supabase': 'vendor/supabase.mjs'}  # custom bundles: tools/bundle.py
 imports = {k: f'./{v}?v={h(v)}' for k, v in vend.items()}
 imports.update({f'./{p}': f'./{p}?v={h(p)}' for p in js if p != 'js/main.js'})
 font = f'fonts/jua.woff2?v={h("fonts/jua.woff2")}'
