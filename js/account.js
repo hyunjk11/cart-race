@@ -195,6 +195,10 @@ async function saveProfile(nick) {
   if (!user || tables !== 'ok') return nick;
   const { error } = await sb.from(T.profiles).upsert({ id: user.id, nickname: nick }, { onConflict: 'id' });
   if (error) throw error;
+  // leaderboard rows carry the nickname: re-send the best laps so they show the new one
+  const d = snap();
+  for (const [m, t] of Object.entries(d.best)) queueLap(m, t, d.char, true);
+  flushLaps();
   return nick;
 }
 

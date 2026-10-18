@@ -14,10 +14,12 @@ run() { # run <label> <cmd...>
   echo "=== $label FAILED"; return 1
 }
 run undef node ../tools/undef.mjs ../js/*.js ../js/config/*.js || fails+=(undef)
+run progress node progress.test.mjs || fails+=(progress)
 run smoke python3 smoke.py || fails+=(smoke)
 run shop1-mart python3 shop1.py "$BASE" mart || fails+=(shop1)
 run banner python3 banner.py "$BASE" || fails+=(banner)
 run garage python3 garage.py "$BASE" || fails+=(garage)
+run account python3 account.py "$BASE" || fails+=(account)
 run fit10-subset python3 fit10.py "$BASE" narrow320,s20-land || fails+=(fit10)
 if [ "${MP:-0}" = 1 ]; then
   run mp python3 mp.py "$BASE" || mpfails+=(mp)
