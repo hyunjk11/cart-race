@@ -9,10 +9,14 @@ import { won } from './shop.js';
 import { S, ctx } from './state.js';
 import { $, stripTags } from './util.js';
 import { awardCoins } from './parts.js';
+import { recordRun } from './account.js';
 
 /** Award this run's coins once (place 1-based, 0 = not finished) and return the breakdown HTML for the results panel. */
 function coinBox(place, shop) {
-  if (!S.coinsDone) S.coinsDone = awardCoins({ place, chaos: ctx.chaos(), drifts: S.player.drifts || 0, shop });
+  if (!S.coinsDone) {
+    S.coinsDone = awardCoins({ place, chaos: ctx.chaos(), drifts: S.player.drifts || 0, shop });
+    recordRun({ place, knocked: ctx.stats.knocked, spilled: ctx.stats.spilled, drifts: S.player.drifts || 0, coins: S.coinsDone.total });
+  }
   const r = S.coinsDone;
   ctx.updGarBtn?.();
   return `<div class="coinbox" id="coinBox"><div class="cbh">🪙 코인 <b>+${r.total}</b></div>${r.lines.map(l => `<div class="cbl"><span>${stripTags(l[0])}</span><b>+${l[1]}</b></div>`).join('')}<div class="cbt">보유 🪙 <b>${r.balance.toLocaleString('ko-KR')}</b> · 🔧 차고에서 파츠를 사 보세요</div></div>`;

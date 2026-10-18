@@ -180,6 +180,7 @@ const TABS = {
     <div class="srow"><span>화면 흔들림·번쩍임</span><span class="seg"><button data-motion="auto" class="${mp === 'auto' ? 'on' : ''}">시스템 설정</button><button data-motion="reduce" class="${mp === 'reduce' ? 'on' : ''}">줄이기</button><button data-motion="full" class="${mp === 'full' ? 'on' : ''}">모두 켜기</button></span></div>
     <h4>⌨️ 키 설정 <small>(버튼을 누르고 새 키 입력 · R/M/T/Enter/Esc 제외)</small></h4>
     <table class="keys">${ACTIONS.map(([id, label]) => `<tr><td>${label}</td><td><button class="kb" data-bind="${id}" aria-label="${label} 키 변경">${b[id].map(keyName).join(' / ')}</button></td></tr>`).join('')}</table>
+    <div class="srow"><span>계정 · 클라우드 저장</span><button id="hAcct" class="sec">👤 계정</button></div>
     <div class="srow"><button id="hResetKeys" class="sec">키 기본값</button><button id="hResetTips" class="sec">튜토리얼 팁 다시 보기</button></div>`;
     },
   ],
@@ -232,6 +233,11 @@ function onClick(e) {
       if (code !== 'Escape' && !setBind(id, code)) api.flash?.('그 키는 쓸 수 없어요');
       render();
     });
+    return;
+  }
+  if (t.id === 'hAcct') {
+    closeHelp();
+    document.dispatchEvent(new CustomEvent('cart:account', { detail: 'acct' }));
     return;
   }
   if (t.id === 'hResetKeys') {

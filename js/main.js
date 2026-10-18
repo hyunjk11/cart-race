@@ -33,6 +33,7 @@ import { startGame } from './inputglue.js';
 import * as netMod from './netglue.js';
 import { netFollow, applyRemote, mpFinish, guestBumps, mirror, guestCustomers, mpTick } from './netglue.js';
 import { $, pick, r2, stripTags } from './util.js';
+import { initAccount, queueLap } from './account.js';
 import { S, ctx } from './state.js';
 // hoisted functions used by the split-out modules (hud/results/inputglue/netglue)
 Object.assign(ctx, {
@@ -988,6 +989,7 @@ function lapDone(c) {
       const b = getBest(TR.MAP_ID);
       if (!b || lt < b) {
         LS.set(bestKey(), lt.toFixed(2));
+        queueLap(TR.MAP_ID, lt, S.MYCHAR);
         c.newBest = true;
         setTimeout(() => flash(`🏅 최고 랩 갱신! ${fmt(lt)}`), 900);
       }
@@ -2278,6 +2280,16 @@ $('garBtn').onclick = openGar;
 $('lobbyGar').onclick = openGar;
 updGarBtn();
 updCharBtns();
+// 👤 계정: after the cloud save lands in localStorage, refresh what the title screen shows
+initAccount({
+  onApplied() {
+    const id = LS.get('cartChar');
+    if (id && charOf(id).id !== S.MYCHAR) chooseChar(id);
+    if (S.state === 'title' || S.state === 'lobby') setCartParts(S.player, loadout(), S.MODE === 'solo' || S.PSTATS);
+    setMyParts(loadout());
+    updGarBtn();
+  },
+});
 const boot = () => {
   loadMap(new URLSearchParams(location.search).get('map') || LS.get('cartMap') || 'mart');
   camLook.set(S.player.x + 4, 1.2, S.player.z);
