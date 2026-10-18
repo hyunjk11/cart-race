@@ -8,6 +8,7 @@ A browser 3D shopping-cart racing game (three.js + cannon-es), Korean UI. **Play
 - **Items, drift → N2O, customers that hop into your cart**, PA announcer, podium cutscene
 - **🪙 Coins + 🔧 차고 (parts shop):** earn coins every run (place, chaos, drift combos, shopping list, first win of the day), buy wheels/baskets/handles/boosters/toppers/paint/trails that visibly change the cart; small stat tweaks (±5% max) in solo, cosmetic-only online unless the host turns them on
 - **Online multiplayer** for up to 4 players (WebRTC via PeerJS, host-authoritative; bots fill empty slots)
+- **👤 계정 (optional):** email + password login (Supabase) saves coins, parts, loadout, character, settings, best laps and stats to the cloud; 🏆 랭킹 shows the top 20 best laps per map. Guest play needs no account
 - Desktop keyboard and mobile touch controls; installable PWA that works offline (solo)
 
 ## Run locally
@@ -49,13 +50,16 @@ Plain ES modules, no build step. `index.html` loads `js/main.js` through an impo
 | `js/fun.js` `js/shop.js` `js/fx.js` `js/audio.js` | items/hazards/events, shopping mode, effects/podium, synthesized audio |
 | `js/net.js` `js/netconfig.js` | PeerJS multiplayer (rooms, lobby, rejoin, host migration); STUN/TURN servers |
 | `js/input.js` `js/help.js` | keyboard remapping + touch controls; help/settings panel, tips, tutorial |
+| `js/account.js` `js/progress.js` | 👤 계정: Supabase email+password auth, cloud save sync (debounced, offline retry), one-time guest merge, nickname profile, leaderboard; pure save snapshot/merge logic |
 | `js/store.js` `js/util.js` | safe localStorage + `DEBUG` flag; tiny shared helpers (`$`, `pick`, escaping, …) |
 | `js/config/tuning.js` | laps, cart driving model (`CART`), bot difficulty (`DIFFS`), pools, wall size, intro length |
 | `js/config/maps.js` | the 4 maps: layout, theme, zones, signs, displays, obstacles |
 | `js/config/characters.js` | the 8 characters: stats, palettes, animation style, voice lines |
 | `js/config/parts.js` | part slots, parts (price, stat tweaks), coin reward rules |
+| `js/config/supabase.js` | Supabase project URL + publishable key, table names, sync timings |
+| `supabase/schema.sql` | the database migration (cart_ tables, RLS, `cart_submit_lap`) — run it once in the Supabase SQL Editor |
 | `js/config/items.js` `js/config/shop.js` | item table + odds by position; shopping goods, prices, scoring, radii |
-| `vendor/` | tree-shaken minified three.js r160 + cannon-es 0.20 bundles (`python3 tools/bundle.py`, rerun after using a new THREE./CANNON. export), PeerJS 1.5.4 (no CDN at runtime) |
+| `vendor/` | tree-shaken minified three.js r160 + cannon-es 0.20 bundles (`python3 tools/bundle.py`, rerun after using a new THREE./CANNON. export), PeerJS 1.5.4, supabase-js 2.109.0 ESM (lazy-loaded) (no CDN at runtime) |
 | `fonts/jua.woff2` | Jua font subset to the characters the game uses |
 | `icons/`, `manifest.json`, `sw.js` | PWA icons, share image, offline service worker |
 | `tools/` | maintenance scripts (below) |
@@ -79,4 +83,6 @@ pip install playwright && python3 -m playwright install chromium
 python3 tests/smoke.py
 CART_BASE=https://hyunjk11.github.io/cart-race/ python3 tests/mp.py   # against the live site
 ```
+`tests/account.py` tests 👤 계정 against a fake Supabase client (`tests/sbmock.js`, no network/emails); `tests/sbrest_setup.sh` + `node tests/sbrest.test.mjs`
+checks `supabase/schema.sql` and the real client against a local Postgres + PostgREST.
 `tests/run_core.sh` runs the core subset used by CI (`MP=1` adds the flaky multiplayer tests).
