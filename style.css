@@ -475,3 +475,16 @@ body:has(#mp:not(.hidden)) :is(#hud,#minimap,#touch,#auto,#helpBtn,#mute,#shopHu
 .aboard li{display:flex;gap:8px;align-items:center;padding:3px 8px;border-radius:8px;font-size:var(--fs-s)}.aboard li:nth-child(odd){background:rgba(255,255,255,.06)}
 .aboard li.me{background:rgba(255,216,77,.22)}.aboard .rk{width:1.8em;text-align:right;color:var(--c-acc)}.aboard .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #tAcct.on{border-color:var(--c-acc);background:rgba(255,216,77,.25)}
+/* 점장 hit overlays (manager.js) */
+#mgfx{position:fixed;inset:0;pointer-events:none;z-index:3;overflow:hidden}
+#mgfx i{position:absolute;display:block;font-style:normal}
+#mgfx .stk{transform:translate(-50%,-50%) rotate(var(--r));background:#ffeb3b;color:#d32f2f;border:3px solid #ff7043;border-radius:10px 22px 22px 10px;padding:6px 16px 6px 22px;font-size:clamp(18px,4.5vw,40px);box-shadow:0 4px 0 rgba(0,0,0,.25);animation:mgstk 2.6s ease-out both}
+#mgfx .stk::before{content:"";position:absolute;left:7px;top:50%;width:8px;height:8px;margin-top:-4px;border-radius:50%;background:#fff;border:2px solid #ff7043}
+@keyframes mgstk{0%{transform:translate(-50%,-50%) rotate(var(--r)) scale(2.4);opacity:0}10%{transform:translate(-50%,-50%) rotate(var(--r)) scale(1);opacity:1}80%{opacity:1}100%{opacity:0}}
+#mgfx .tp{top:-2%;width:clamp(40px,9vw,90px);background:repeating-linear-gradient(180deg,#fff 0 22px,#f1f1f1 22px 24px);border-radius:0 0 40% 60%;box-shadow:2px 3px 6px rgba(0,0,0,.25);transform-origin:top;animation:mgtp 2.6s ease-out both}
+@keyframes mgtp{0%{transform:scaleY(0)}15%{transform:scaleY(1.05) rotate(2deg)}40%{transform:scaleY(1) rotate(-2deg)}85%{opacity:1}100%{opacity:0;transform:translateY(30%)}}
+#mgfx .spl{width:150px;height:130px;border-radius:48% 52% 41% 59%/55% 38% 62% 45%;opacity:.8;transform:scale(var(--s));animation:mgspl 2.6s ease-out both}
+@keyframes mgspl{0%{transform:scale(0)}12%{transform:scale(calc(var(--s)*1.15))}20%{transform:scale(var(--s))}75%{opacity:.75}100%{opacity:0;transform:scale(var(--s)) translateY(40px)}}
+#mgfx .seed{width:12px;height:18px;border-radius:50%;background:#212121;animation:mgspl 2.6s ease-out both;--s:1}
+#mgfx .feather{left:50%;top:40%;transform:translate(-50%,-50%);font-size:clamp(40px,10vw,90px);color:#ffeb3b;-webkit-text-stroke:3px #5d4037;animation:mgstk 1.6s ease-out both;--r:-8deg}
+body.reduce-motion #mgfx i{animation-duration:.01s!important;opacity:.7}

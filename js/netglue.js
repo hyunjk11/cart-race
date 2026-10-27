@@ -208,6 +208,7 @@ function makeSnap(full) {
     });
   else delete snap.pp;
   if (ctx.SHOPON()) snap.sh = S.shop.snap();
+  snap.mg = S.mgr.snap();
   return snap;
 }
 export const mirror = [];
@@ -250,6 +251,7 @@ function onSnap(m) {
     for (let i = m.pr.length; i < mirror.length; i++) mirror[i].mesh.visible = false;
   }
   S.fun.applySnap(m);
+  S.mgr.applySnap(m.mg);
   if (m.sh && S.shop) S.shop.applySnap(m.sh);
 }
 const _q = new THREE.Quaternion();
@@ -429,6 +431,7 @@ export function init() {
       const c = ctx.carts[i];
       if (c && c.remote) S.fun.remoteHazardHit(c, id, sh);
     },
+    onRemoteMg: (i, m) => S.mgr.remoteHit(i, m),
     startRace: ctx.startRaceMP,
     onRemoteState,
     onRemoteCrash,

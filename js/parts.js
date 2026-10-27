@@ -61,15 +61,16 @@ export function equip(slot, id) {
   return true;
 }
 
-/** Total stat multipliers { spd, hdl, drf } (1 = unchanged) for a loadout, each clamped to ±PART_STAT_CAP. */
-export function statMods(lo) {
+/** Total stat multipliers { spd, hdl, drf } (1 = unchanged) for a loadout, each clamped to ±PART_STAT_CAP, then scaled by k
+ * (multiplayer counts parts at CATCHUP.mpPartK). */
+export function statMods(lo, k = 1) {
   const m = { spd: 0, hdl: 0, drf: 0 };
   lo = cleanLoadout(lo);
   for (const s of SLOTS) {
     const st = (partOf(s.id, lo[s.id]) || {}).st;
     if (st) for (const k in m) m[k] += st[k] || 0;
   }
-  for (const k in m) m[k] = 1 + Math.max(-PART_STAT_CAP, Math.min(PART_STAT_CAP, m[k]));
+  for (const s in m) m[s] = 1 + Math.max(-PART_STAT_CAP, Math.min(PART_STAT_CAP, m[s])) * k;
   return m;
 }
 /** "+2% 속도 · -2% 핸들" style text for a stat object (fractions). */

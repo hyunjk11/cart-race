@@ -237,6 +237,7 @@ function hostRecv(conn, m) {
   else if (m.t === 'spawn') api.onSpawn(m.a);
   else if (m.t === 'crash') api.onRemoteCrash(i, +m.k || 0);
   else if (m.t === 'hz') api.onRemoteHazard(i, m.id, !!m.sh);
+  else if (m.t === 'mg' && api.onRemoteMg) api.onRemoteMg(i, m);
 }
 function sendSpectate(conn, i) {
   conn.send(

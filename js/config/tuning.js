@@ -40,3 +40,45 @@ export const DIFFS = {
 /** Wall strip thickness (SD) and height (SH) in m (track.js). */
 export const SD = 1.6,
   SH = 3.2;
+
+/**
+ * 점장 (store manager) catch-up NPC (js/manager.js). He pops up on a scissor lift ahead of the race leader and throws
+ * comic stuff at them. Distances in m, times in s. The bigger the leader's lead over 2nd, the more often / more throws.
+ */
+export const MANAGER = {
+  on: true, // race mode only (not 장보기)
+  firstDelay: 20, // earliest visit after the start
+  cdMax: 28, // cooldown after a visit when the lead is just over minGap
+  cdMin: 12, // cooldown when the lead is >= fullGap
+  retry: 3, // re-check interval while the race is close
+  minGap: 22, // leader must be this far ahead of 2nd before he cares (m)
+  fullGap: 110, // lead at which he goes all-out (m)
+  maxThrows: 3, // throws per visit at fullGap (1 at minGap)
+  p2nd: 0.25, // chance a throw goes at 2nd place instead (3+ racers)
+  ahead: 34, // appears this far ahead of the target (m), on top of the shelf line
+  windup: 0.45, // arm swing before release
+  flight: 1.35, // projectile air time — the warning circle shows for this long
+  gap: 1.05, // time between throws
+  lead: 0.85, // how much of the target's predicted motion he aims for (1 = perfect lead)
+  aimErr: 1.3, // random aim error (m)
+  hitR: 1.9, // impact radius (m); the warning circle is drawn this size
+  aiSee: 0.45, // chance a bot notices a warning circle and steers around it
+  liftH: 3.35, // standing height (top of the shelves)
+  // hit effects
+  slowMelon: 0.8, // maxV multiplier while carrying a watermelon
+  melonT: 3.5,
+  overlayT: 2.6, // screen stickers / tissue / splat on the player's screen
+};
+/** Back-of-pack help: slipstream behind a cart ahead + faster drift gauge the lower your position. */
+export const CATCHUP = {
+  draftMin: 2.2, // slipstream window behind the cart ahead (m)
+  draftMax: 13,
+  draftW: 1.7, // max sideways offset (m)
+  draftMinV: 8, // both carts above this speed
+  draftDelay: 0.35, // s in the window before it kicks in
+  draftSpeed: 1.07, // maxV multiplier while drafting
+  draftAccel: 3, // extra m/s² while drafting
+  draftGauge: 0.22, // drift-gauge fill per second while drafting (1 = one N2O)
+  rankGauge: 0.6, // drift gauge fills up to +60% faster in last place (0 for the leader)
+  mpPartK: 0.5, // multiplayer: parts stat bonuses count at 50% (when the host turns them on)
+};

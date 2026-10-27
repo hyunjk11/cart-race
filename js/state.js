@@ -15,6 +15,7 @@ export const S = {
   cutDone: null,
   firstFinT: 0,
   fun: null,
+  mgr: null, // 점장 (manager.js)
   GMODE: null,
   last: null,
   MODE: 'solo',

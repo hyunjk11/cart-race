@@ -97,7 +97,7 @@ function render() {
     ]
       .map(([k, v]) => `<div class="gsr"><span>${k}</span><i class="${v > 1 ? 'up' : v < 1 ? 'dn' : ''}">${pct(v)}</i></div>`)
       .join('') +
-    `<div class="note">능력치 변화는 최대 ±5%. 멀티플레이에서는 호스트가 켰을 때만 적용 (기본: 외형만)</div>`;
+    `<div class="note">능력치 변화는 최대 ±5%. 멀티플레이에서는 공정하게 절반(±2.5%)만, 호스트가 켰을 때만 적용 (기본: 외형만)</div>`;
 }
 function preview() {
   P.cart.setParts(trial);

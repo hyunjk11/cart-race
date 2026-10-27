@@ -214,6 +214,25 @@ export const sound = {
     tone(659, 0.35, 'sine', 0.16, 0.3);
     tone(523, 0.5, 'sine', 0.16, 0.6);
   },
+  // 점장 (manager.js): megaphone squawk + feedback whine, toss whistle, splat, rubber-chicken squeak
+  megaphone() {
+    tone(1900, 0.35, 'sine', 0.05, 0, sfx, 2600);
+    [0, 0.12, 0.24, 0.36].forEach((w, i) => tone(300 + (i % 2) * 90, 0.11, 'square', 0.12, 0.3 + w, sfx, 260 + (i % 2) * 60));
+    noise(0.5, 1500, 0.08, 0.3, 4);
+  },
+  toss() {
+    tone(500, 0.45, 'triangle', 0.12, 0, sfx, 1400);
+    noise(0.4, 800, 0.2, 0, 2, 'bandpass', 2500);
+  },
+  splat(k = 1) {
+    noise(0.35 * k, 900, 0.45, 0, 1, 'lowpass', 120);
+    tone(160, 0.2, 'sine', 0.3, 0, sfx, 60);
+  },
+  squeak() {
+    tone(1300, 0.18, 'square', 0.12, 0, sfx, 2100);
+    tone(1700, 0.35, 'square', 0.12, 0.16, sfx, 700);
+    tone(900, 0.25, 'sawtooth', 0.05, 0.16, sfx, 500);
+  },
   lap() {
     tone(880, 0.12, 'square', 0.15);
     tone(1175, 0.2, 'square', 0.15, 0.12);

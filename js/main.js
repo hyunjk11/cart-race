@@ -8,9 +8,10 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import * as TR from './track.js';
 import { MAP_IDS, setMap, buildWorld, textSprite, path, strips, hAt, zoneAt, inRect, atLane, tangentAt } from './track.js';
-import { LAPS, CART, INTRO_S, SCOOP_P, MAXP, RIDE_S, CART_R, DIFFS } from './config/tuning.js';
+import { LAPS, CART, INTRO_S, SCOOP_P, MAXP, RIDE_S, CART_R, DIFFS, MANAGER, CATCHUP } from './config/tuning.js';
 import { MAPS } from './config/maps.js';
 import { createFun, itemOdds } from './fun.js';
+import { createManager } from './manager.js';
 import { NET, pushLobby, setMyChar, setMyParts } from './net.js';
 import { makeCart, makeCustomer } from './models.js';
 import * as FX from './fx.js';
@@ -229,12 +230,14 @@ function setCartChar(c, id) {
   c.lines = d.lines;
 }
 S.MYCHAR = charOf(LS.get('cartChar') || 'mango').id;
-/** Equip a parts loadout on a cart: model changes always; stat tweaks only when `stats`. */
+/** Equip a parts loadout on a cart: model changes always; stat tweaks only when `stats` (true = full, a number = that fraction). */
 function setCartParts(c, lo, stats) {
   c.lo = cleanLoadout(lo);
   c.g.setParts(c.lo);
-  c.pm = stats ? statMods(c.lo) : null;
+  c.pm = stats ? statMods(c.lo, stats === true ? 1 : +stats) : null;
 }
+/** parts stat factor for the current mode: solo full, multiplayer CATCHUP.mpPartK when the host turned stats on, else 0 */
+const partK = mode => ((mode || S.MODE) === 'solo' ? 1 : S.PSTATS ? CATCHUP.mpPartK : 0);
 Object.assign(ctx, { setCartParts });
 const cline = (c, k, fb) => {
   const a = (c.lines && c.lines[k]) || fb;
@@ -869,7 +872,38 @@ function updateCart(c, dt) {
     (boosting ? CART.boostSpeed : 1) *
     (c.push && S.autoAccel ? CART.autoPushSpeed : 1) *
     (c.magnetT > 0 ? CART.magnetSpeed : 1) *
+    (c.melonT > 0 ? MANAGER.slowMelon : 1) *
     (1 - CART.riderSlow * nRiders(c));
+  // slipstream: tucked in close behind a moving cart ahead -> a bit more top speed + accel + drift-gauge fill
+  c.draft = false;
+  if (S.state === 'race' && !c.finished && c.v > CATCHUP.draftMinV && !(c.spin > 0)) {
+    const hx = Math.sin(c.h),
+      hz = Math.cos(c.h);
+    let ok = false;
+    for (const o of carts) {
+      if (o === c || o.inactive || o.finished || (o.v || 0) < CATCHUP.draftMinV) continue;
+      const rx = o.x - c.x,
+        rz = o.z - c.z,
+        ah = rx * hx + rz * hz;
+      if (ah > CATCHUP.draftMin && ah < CATCHUP.draftMax && Math.abs(rx * hz - rz * hx) < CATCHUP.draftW) {
+        ok = true;
+        break;
+      }
+    }
+    c.draftT = ok ? (c.draftT || 0) + dt : 0;
+    if (c.draftT > CATCHUP.draftDelay) {
+      c.draft = true;
+      maxV *= CATCHUP.draftSpeed;
+      c.v += CATCHUP.draftAccel * dt;
+      c.gauge += CATCHUP.draftGauge * dt;
+      c.draftTotal = (c.draftTotal || 0) + dt;
+      if (!c.ai && !c.wasDraft) {
+        flash('💨 슬립스트림! 바짝 붙어서 가속 + 게이지 충전');
+        sound.whoosh();
+      }
+    }
+  } else c.draftT = 0;
+  c.wasDraft = c.draft;
   const zn = zoneAt(c.x, c.z);
   c.bumpT = (c.bumpT || 0) - dt;
   if (zn) {
@@ -921,7 +955,16 @@ function updateCart(c, dt) {
   c.slip = slip;
   if (c.drifting && Math.abs(slip) > 0.75 && c.riders && c.riders.length && c.driftT > 0.8) hopOut(c, 'drift');
   if (c.drifting && S.state === 'race') {
-    c.gauge += Math.abs(slip) * Math.abs(c.v) * dt * CART.driftCharge * (c.st ? c.st.drf : 1) * (c.pm ? c.pm.drf : 1);
+    c.gauge +=
+      Math.abs(slip) *
+      Math.abs(c.v) *
+      dt *
+      CART.driftCharge *
+      (c.st ? c.st.drf : 1) *
+      (c.pm ? c.pm.drf : 1) *
+      (1 + CATCHUP.rankGauge * (c.rankT || 0)); // back of the pack charges faster
+  }
+  if (S.state === 'race') {
     if (c.gauge >= 1) {
       c.gauge = 0;
       if (c.n2o < 2) {
@@ -1402,7 +1445,7 @@ function renderModes() {
         )
         .join('') +
       (lobby
-        ? `<button class="${S.PSTATS ? 'on' : ''}" data-pst="1" aria-pressed="${!!S.PSTATS}" ${locked ? 'disabled' : ''} title="켜면 파츠 능력치(±5%)가 적용돼요. 끄면 외형만">🔧 파츠 능력치 ${S.PSTATS ? '켬' : '끔'}</button>`
+        ? `<button class="${S.PSTATS ? 'on' : ''}" data-pst="1" aria-pressed="${!!S.PSTATS}" ${locked ? 'disabled' : ''} title="켜면 파츠 능력치가 절반(최대 ±2.5%)만 적용돼요. 끄면 외형만">🔧 파츠 능력치 ${S.PSTATS ? '켬 (절반만)' : '끔'}</button>`
         : '');
     el.querySelectorAll('button').forEach(
       b =>
@@ -1482,10 +1525,40 @@ function makeFun() {
       if (SHOPON() && S.MODE !== 'guest' && S.state === 'race') S.shop.hit(c, 'hit');
     },
   });
+  S.mgr = createManager({
+    scene,
+    carts,
+    sound,
+    get player() {
+      return S.player;
+    },
+    get mode() {
+      return S.MODE;
+    },
+    get gmode() {
+      return S.GMODE;
+    },
+    say,
+    comic: FX.comic,
+    flash,
+    announce,
+    puff,
+    shakeIt: k => {
+      S.shake = Math.max(S.shake, k);
+    },
+    addPuddle: (x, z) => S.fun.addHazard('puddle', x, z, 8, 1.7, null),
+    send: m => NET.send(m),
+  });
+  const funReset = S.fun.reset;
+  S.fun.reset = () => {
+    funReset();
+    S.mgr.reset();
+  };
   funOwned = { objs: scene.children.filter(o => !s0.has(o)), bodies: world.bodies.filter(b => !b0.has(b)) };
 }
 function disposeFun() {
   S.fun.reset();
+  S.mgr.dispose();
   const freeMat = m => {
     if (!m) return;
     for (const x of Array.isArray(m) ? m : [m]) {
@@ -1597,6 +1670,7 @@ function extraObs() {
   const o = [];
   for (const C of traffic) o.push({ x: C.x, z: C.z, r: 2.6 });
   if (trk) for (const d of trk.doors) if (!d.strip.off) o.push({ x: d.x, z: d.z, r: 1.1 });
+  if (S.mgr) o.push(...S.mgr.obs());
   return o;
 }
 // ---------- map loading (title / lobby only) ----------
@@ -1823,7 +1897,7 @@ function startRaceMP(slots, you, mode) {
       c.prog = -1e9;
     }
     if (s && s.char) setCartChar(c, s.char);
-    if (s) setCartParts(c, s.parts || (s.type === 'bot' ? randomLoadout() : null), mode === 'solo' || S.PSTATS);
+    if (s) setCartParts(c, s.parts || (s.type === 'bot' ? randomLoadout() : null), partK(mode));
     nameTag(c, s && i !== you ? s.name : null);
   });
   endSpectate();
@@ -2051,6 +2125,11 @@ function step(dt) {
       if (!c.finished) {
         c.prog = c.lap * S.N + c.idx;
       }
+  {
+    // rank fraction for catch-up help: 0 = leader .. 1 = last
+    const act = carts.filter(c => !c.inactive);
+    for (const c of act) c.rankT = act.length > 1 ? act.filter(o => o !== c && o.prog > c.prog).length / (act.length - 1) : 0;
+  }
   for (const c of carts) updateCart(c, dt);
   interactions(dt);
   if (SHOPON() && S.MODE !== 'guest') S.shop.update(dt, S.state, S.raceT, S.MODE);
@@ -2067,6 +2146,7 @@ function step(dt) {
   )
     endRace();
   S.fun.update(dt, S.state, S.raceT, S.MODE === 'guest');
+  S.mgr.update(dt, S.state);
   updateMapFx(dt);
   trk.tick(dt);
   if (S.MODE === 'guest') guestCustomers(dt);
@@ -2107,8 +2187,31 @@ function step(dt) {
   S.msgT -= dt;
   if (S.msgT <= 0) $('msg').textContent = '';
 }
+// slipstream wind lines around a drafting cart (created lazily, shared geometry/material)
+const windG = new THREE.BoxGeometry(0.05, 0.05, 1.5),
+  windM = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, depthWrite: false });
+function windLines(c, dt) {
+  if (!c.draft && !c.wind) return;
+  if (!c.wind) {
+    c.wind = new THREE.Group();
+    for (let k = 0; k < (LOWFX ? 4 : 7); k++) {
+      const m = new THREE.Mesh(windG, windM);
+      m.userData.o = [(k % 2 ? 1 : -1) * (0.9 + Math.random() * 0.5), 0.4 + Math.random() * 1.4, Math.random() * 4];
+      c.wind.add(m);
+    }
+    c.g.root.add(c.wind);
+  }
+  c.wind.visible = !!c.draft;
+  if (!c.draft) return;
+  for (const m of c.wind.children) {
+    const o = m.userData.o;
+    o[2] = (o[2] + dt * 14) % 4;
+    m.position.set(o[0], o[1], 2.2 - o[2]);
+  }
+}
 function render(dt) {
   for (const c of carts) {
+    windLines(c, dt);
     if (c.inactive) continue;
     {
       const fx = Math.sin(c.h),
@@ -2271,7 +2374,7 @@ function updGarBtn() {
 Object.assign(ctx, { updGarBtn });
 function openGar() {
   openGarage(S.MYCHAR, lo => {
-    if (S.state === 'title' || S.state === 'lobby') setCartParts(S.player, lo, S.MODE === 'solo' || S.PSTATS);
+    if (S.state === 'title' || S.state === 'lobby') setCartParts(S.player, lo, partK());
     setMyParts(lo);
     updGarBtn();
   });
@@ -2285,7 +2388,7 @@ initAccount({
   onApplied() {
     const id = LS.get('cartChar');
     if (id && charOf(id).id !== S.MYCHAR) chooseChar(id);
-    if (S.state === 'title' || S.state === 'lobby') setCartParts(S.player, loadout(), S.MODE === 'solo' || S.PSTATS);
+    if (S.state === 'title' || S.state === 'lobby') setCartParts(S.player, loadout(), partK());
     setMyParts(loadout());
     updGarBtn();
   },
@@ -2410,6 +2513,9 @@ if (DEBUG)
     hopOut,
     get fun() {
       return S.fun;
+    },
+    get mgr() {
+      return S.mgr;
     },
     insideShelf,
     get autoAccel() {
