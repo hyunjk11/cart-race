@@ -9,11 +9,21 @@ export const ITEMS = {
   bag: { icon: '🛍️', name: '장바구니 미사일' },
   shield: { icon: '🛡️', name: '실드' },
   magnet: { icon: '🧲', name: '자석' },
+  sale: { icon: '📢', name: '세일 방송' },
 };
 // item odds by race position: leaders get mostly defensive/drop items, the back of the pack gets catch-up items
-//                 banana puddle sign  bag  shield magnet
-export const W_FRONT = [3, 2, 2, 0.6, 3, 0.4],
-  W_BACK = [0.8, 0.8, 0.4, 3, 1, 3];
+//                 banana puddle sign  bag  shield magnet sale
+export const W_FRONT = [3, 2, 2, 0.6, 3, 0.4, 0],
+  W_BACK = [0.8, 0.8, 0.4, 3, 1, 3, 1.8];
+/** 📢 세일 방송 (back-runner item): what the PA and the summoned customers say. */
+export const SALE_LINES = {
+  pa: [
+    '📢 세일 방송! {n} 앞 코너 1+1 행사 시작~!',
+    '📢 딩동~ {n} 고객님 앞에서 반값 세일 중입니다!',
+    '📢 지금 {n} 앞에서 계란 한 판 990원!!',
+  ],
+  crowd: ['세일이다!!', '1+1 어디요?!', '줄 서세요 줄~!', '계란 한 판!!', '비켜요~ 내 꺼야!', '반값이래!!'],
+};
 
 /** 점장 throwables (js/manager.js): icon, name, comic text + colour, effect, relative pick weight. */
 export const MG_THROWS = {

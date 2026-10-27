@@ -7,7 +7,8 @@ import * as TR from './track.js';
 import { hAt, atLane as tAtLane, straightAt } from './track.js';
 import { makeCart } from './models.js';
 import { lm } from './util.js';
-import { ITEMS, W_FRONT, W_BACK } from './config/items.js';
+import { ITEMS, W_FRONT, W_BACK, SALE_LINES } from './config/items.js';
+import { SALE } from './config/tuning.js';
 
 const ITEM_KEYS = Object.keys(ITEMS);
 export function itemOdds(t) {
@@ -354,9 +355,75 @@ export function createFun(G) {
     } else if (it === 'magnet') {
       c.magnetT = 3.5;
       c.magTarget = aheadOf(c);
-    }
+    } else if (it === 'sale') saleCrowd(c);
     if (c === G.player) G.flash(`${ITEMS[it].icon} ${ITEMS[it].name}!`);
-    else if (Math.random() < 0.6) G.say(c, it === 'bag' ? '받아라!' : it === 'banana' ? '바나나 선물~' : '후후후', 1.3);
+    else if (Math.random() < 0.6)
+      G.say(c, it === 'bag' ? '받아라!' : it === 'banana' ? '바나나 선물~' : it === 'sale' ? '세일이다~ ㅋㅋ' : '후후후', 1.3);
+  }
+  // 📢 세일 방송: the customers nearest the leader (other than the user) rush to a line across the track in front of them
+  const sales = [];
+  let saleSeq = 0;
+  function saleCrowd(c) {
+    const act = carts.filter(o => o !== c && !o.inactive && !o.finished);
+    if (!act.length) return null;
+    const T = act.reduce((a, b) => (b.prog > a.prog ? b : a));
+    const i = (T.idx + SALE.ahead) % N,
+      w = 2 * (HW - 0.8),
+      g0 = -(HW - 0.8) + Math.random() * (w - SALE.gap); // gap [g0, g0+gap]
+    const lats = [];
+    for (let k = 0; k < SALE.n; k++) {
+      let lat = -(HW - 0.8) + ((k + 0.5) / SALE.n) * (w - SALE.gap);
+      if (lat > g0) lat += SALE.gap;
+      lats.push(lat);
+    }
+    const free = customers.filter(cu => cu.state === 'walk');
+    const spot = atLane(i, 0);
+    free.sort((a, b) => Math.hypot(a.x - spot.x, a.z - spot.z) - Math.hypot(b.x - spot.x, b.z - spot.z));
+    const crowd = free.slice(0, SALE.n);
+    crowd.forEach((cu, k) => {
+      const q = atLane(i + (k % 2) * 2, lats[k]);
+      cu.rush = { x: q.x, z: q.z, t: SALE.dur };
+      if (Math.hypot(cu.x - q.x, cu.z - q.z) > 26) {
+        // far ones "arrive" from the side aisles just ahead of the line
+        const side = lats[k] < 0 ? -1 : 1,
+          a = atLane(i + 5 + k, side * (HW - 0.4));
+        cu.x = a.x;
+        cu.z = a.z;
+      }
+      if (k < 3) G.say(cu, SALE_LINES.crowd[(Math.random() * SALE_LINES.crowd.length) | 0], 2.2, true);
+    });
+    const sg = G.textSprite('📢 1+1 세일!', '#e91e63');
+    sg.position.set(spot.x, 3.8 + hAt(spot.x, spot.z), spot.z);
+    sg.scale.set(5, 1.25, 1);
+    scene.add(sg);
+    sales.push({ id: ++saleSeq, sg, t: SALE.dur, by: c, T, i, n: crowd.length, crowd, x: spot.x, z: spot.z, L: '' });
+    const nm = T === G.player ? '나' : T.name;
+    const L = SALE_LINES.pa[(Math.random() * SALE_LINES.pa.length) | 0].replace('{n}', nm === '나' ? '내' : nm);
+    sales[sales.length - 1].L = L;
+    if (G.announce) G.announce(L);
+    sound.chime && sound.chime();
+    if (sound.megaphone) sound.megaphone();
+    if (c === G.player) G.flash(`📢 세일 방송! ${T.name} 앞에 손님 ${crowd.length}명 출동 ㅋㅋ`);
+    else if (T === G.player) G.flash('📢 앞에 세일이래! 손님들 피해!');
+    return sales[sales.length - 1];
+  }
+  function updateSales(dt) {
+    for (let k = sales.length - 1; k >= 0; k--) {
+      const s = sales[k];
+      s.t -= dt;
+      s.sg.position.y += Math.sin(performance.now() / 150) * 0.004;
+      if (s.t <= 0) {
+        scene.remove(s.sg);
+        disposeObj(s.sg);
+        sales.splice(k, 1);
+        for (const cu of s.crowd || [])
+          if (cu.rush) {
+            delete cu.rush;
+            cu.sp = cu.baseSp || cu.sp;
+            G.retarget(cu);
+          }
+      }
+    }
   }
   const shieldG = new THREE.SphereGeometry(1.6, 16, 12),
     shieldM = new THREE.MeshBasicMaterial({ color: 0x80d8ff, transparent: true, opacity: 0.25, depthWrite: false });
@@ -606,6 +673,7 @@ export function createFun(G) {
   function update(dt, state, raceT, guest) {
     updateSkids(dt);
     if (guest) return guestUpdate(dt);
+    updateSales(dt);
     const t = performance.now() / 1000;
     for (const b of boxes) {
       b.cd -= dt;
@@ -648,7 +716,7 @@ export function createFun(G) {
       if (c.ai && c.item && state === 'race') {
         c.itemHold += dt;
         if (c.itemHold > c.aiUseAt) {
-          if (c.item !== 'bag' || aheadOf(c)) useItem(c);
+          if ((c.item !== 'bag' && c.item !== 'sale') || aheadOf(c)) useItem(c);
           else c.itemHold = 0;
         }
       }
@@ -786,6 +854,7 @@ export function createFun(G) {
       hz: hazards.map(h => [h.id, h.type, r2(h.x), r2(h.z), h.r]),
       pj: projs.map(p => [p.id, r2(p.x), r2(p.z)]),
       bx: boxes.map(b => (b.cd > 0 ? 1 : 0)),
+      sl: sales.map(s => [s.id, r2(s.x), r2(s.z), s.L]),
       ev: ev.name
         ? {
             n: ev.name,
@@ -844,6 +913,24 @@ export function createFun(G) {
     S.bx.forEach((v, i) => {
       if (boxes[i]) boxes[i].cd = v ? 1 : 0;
     });
+    // 📢 세일 방송 signs (the crowd itself arrives with the customer sync)
+    const sl = S.sl || [];
+    for (let k = sales.length - 1; k >= 0; k--)
+      if (!sl.some(a => a[0] === sales[k].id)) {
+        scene.remove(sales[k].sg);
+        disposeObj(sales[k].sg);
+        sales.splice(k, 1);
+      }
+    for (const [id, x, z, L] of sl)
+      if (!sales.some(q => q.id === id)) {
+        const sg = G.textSprite('📢 1+1 세일!', '#e91e63');
+        sg.position.set(x, 3.8 + hAt(x, z), z);
+        sg.scale.set(5, 1.25, 1);
+        scene.add(sg);
+        sales.push({ id, sg, t: 999, x, z, L });
+        if (L && G.announce) G.announce(L);
+        sound.chime && sound.chime();
+      }
     (S.pp || []).forEach((a, i) => {
       const p = props[i];
       if (!p) return;
@@ -868,6 +955,11 @@ export function createFun(G) {
     for (const p of projs) scene.remove(p.m);
     projs.length = 0;
     for (const b of boxes) b.cd = 0;
+    for (const q of sales) {
+      scene.remove(q.sg);
+      disposeObj(q.sg);
+    }
+    sales.length = 0;
     ev.next = 18 + Math.random() * 8;
     for (const c of carts) {
       c.shieldT = 0;
@@ -898,6 +990,8 @@ export function createFun(G) {
     props,
     ev,
     startEvent,
+    saleCrowd,
+    sales,
     ITEMS,
   };
 }

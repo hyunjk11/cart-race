@@ -82,3 +82,11 @@ export const CATCHUP = {
   rankGauge: 0.6, // drift gauge fills up to +60% faster in last place (0 for the leader)
   mpPartK: 0.5, // multiplayer: parts stat bonuses count at 50% (when the host turns them on)
 };
+
+/** 📢 세일 방송 item (js/fun.js saleCrowd): customers rush to a line across the track in front of the leader. */
+export const SALE = {
+  ahead: 26, // path segments in front of the target (≈2m each)
+  n: 9, // customers summoned
+  dur: 7.5, // seconds they stand there
+  gap: 3.2, // free gap (m) left somewhere in the line so a skilled driver can thread it
+};
