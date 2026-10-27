@@ -523,6 +523,8 @@ export function createManager(G) {
         add('spl', `left:${8 + R() * 70}%;top:${10 + R() * 60}%;--s:${0.6 + R() * 0.9};background:${col};animation-delay:${k * 0.04}s`);
       if (type === 'melon') for (let k = 0; k < 6; k++) add('seed', `left:${15 + R() * 65}%;top:${15 + R() * 60}%`);
     } else add('feather', '', '꽥!');
+    el.dataset.last = type;
+    el.dataset.n = el.children.length;
     clearTimeout(overlay.tm);
     overlay.tm = setTimeout(() => {
       el.className = '';

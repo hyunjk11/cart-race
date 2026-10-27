@@ -48,17 +48,18 @@ Plain ES modules, no build step. `index.html` loads `js/main.js` through an impo
 | `js/models.js` `js/chars.js` `js/charsel.js` | cart/customer meshes; toon characters + decorations; character select |
 | `js/parts.js` `js/cartparts.js` `js/garage.js` | coins/owned/equipped parts in localStorage + stat mods + coin awards; cached part geometry/materials (low-quality variants); 🔧 차고 UI with 3D preview |
 | `js/fun.js` `js/shop.js` `js/fx.js` `js/audio.js` | items/hazards/events, shopping mode, effects/podium, synthesized audio |
+| `js/manager.js` | 점장 NPC: rides a scissor lift ahead of a runaway leader and throws mop / frozen mackerel / rubber chicken / price stickers / watermelon / tissue (warning circle, shield blocks, host event log in `snap.mg`, guests report own hits with `{t:'mg'}`); debug `__game.mgr.force(type, cartIdx, n)` |
 | `js/net.js` `js/netconfig.js` | PeerJS multiplayer (rooms, lobby, rejoin, host migration); STUN/TURN servers |
 | `js/input.js` `js/help.js` | keyboard remapping + touch controls; help/settings panel, tips, tutorial |
 | `js/account.js` `js/progress.js` | 👤 계정: Supabase email+password auth, cloud save sync (debounced, offline retry), one-time guest merge, nickname profile, leaderboard; pure save snapshot/merge logic |
 | `js/store.js` `js/util.js` | safe localStorage + `DEBUG` flag; tiny shared helpers (`$`, `pick`, escaping, …) |
-| `js/config/tuning.js` | laps, cart driving model (`CART`), bot difficulty (`DIFFS`), pools, wall size, intro length |
+| `js/config/tuning.js` | laps, cart driving model (`CART`), bot difficulty (`DIFFS`), pools, wall size, intro length, 점장 (`MANAGER`: cooldown, min gap, throws by lead), catch-up (`CATCHUP`: slipstream, rank-scaled gauge, MP parts 50%) |
 | `js/config/maps.js` | the 4 maps: layout, theme, zones, signs, displays, obstacles |
 | `js/config/characters.js` | the 8 characters: stats, palettes, animation style, voice lines |
 | `js/config/parts.js` | part slots, parts (price, stat tweaks), coin reward rules |
 | `js/config/supabase.js` | Supabase project URL + publishable key, table names, sync timings |
 | `supabase/schema.sql` | the database migration (cart_ tables, RLS, `cart_submit_lap`) — run it once in the Supabase SQL Editor |
-| `js/config/items.js` `js/config/shop.js` | item table + odds by position; shopping goods, prices, scoring, radii |
+| `js/config/items.js` `js/config/shop.js` | item table + odds by position, 점장 throwables + PA lines (`MG_THROWS`, `MG_LINES`); shopping goods, prices, scoring, radii |
 | `vendor/` | tree-shaken minified three.js r160 + cannon-es 0.20 bundles (`python3 tools/bundle.py`, rerun after using a new THREE./CANNON. export), PeerJS 1.5.4, supabase-js 2.109.0 ESM (lazy-loaded) (no CDN at runtime) |
 | `fonts/jua.woff2` | Jua font subset to the characters the game uses |
 | `icons/`, `manifest.json`, `sw.js` | PWA icons, share image, offline service worker |

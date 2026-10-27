@@ -19,6 +19,7 @@ run smoke python3 smoke.py || fails+=(smoke)
 run shop1-mart python3 shop1.py "$BASE" mart || fails+=(shop1)
 run banner python3 banner.py "$BASE" || fails+=(banner)
 run garage python3 garage.py "$BASE" || fails+=(garage)
+run manager python3 manager.py "$BASE" || fails+=(manager)
 run account python3 account.py "$BASE" || fails+=(account)
 run fit10-subset python3 fit10.py "$BASE" narrow320,s20-land || fails+=(fit10)
 if [ "${MP:-0}" = 1 ]; then
